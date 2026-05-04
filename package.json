@@ -1,0 +1,18 @@
+{
+  "name": "vibeforge",
+  "module": "server.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot run server.ts",
+    "start": "bun run server.ts",
+    "build": "bun run build.mjs",
+    "deploy": "bun run build && echo ✅ Build complete. Copy dist/ to your static hosting."
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

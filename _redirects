@@ -1,0 +1,5 @@
+# Cloudflare Pages redirects
+# /path        → destination    status
+
+# 子页面无尾随斜杠 → 加上尾随斜杠（避免 404）
+/snake         /snake/          301

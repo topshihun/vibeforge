@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VibeForge — 创意工坊</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a1a;
+    color: #e0e0e0;
+    font-family: 'Microsoft YaHei', -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse at 20% 20%, rgba(98, 0, 255, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(0, 200, 255, 0.08) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 1;
+    padding: 40px 24px 20px;
+    text-align: center;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .logo-icon {
+    font-size: 2.8em;
+    line-height: 1;
+    filter: drop-shadow(0 0 20px rgba(130, 87, 229, 0.5));
+    animation: pulse 3s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  .logo-text {
+    font-size: clamp(2em, 6vw, 3.2em);
+    font-weight: 800;
+    background: linear-gradient(135deg, #8257e5, #00c8ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 2px;
+  }
+  .tagline {
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    color: #666;
+    letter-spacing: 6px;
+  }
+
+  footer {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 20px;
+    font-size: 0.8em;
+    color: #444;
+    border-top: 1px solid rgba(130, 87, 229, 0.1);
+  }
+
+  .projects {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 24px;
+    padding: 32px 24px 60px;
+    max-width: 1000px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .project-card {
+    background: linear-gradient(145deg, rgba(30, 30, 60, 0.7), rgba(20, 20, 40, 0.9));
+    border: 1px solid rgba(130, 87, 229, 0.2);
+    border-radius: 16px;
+    padding: 28px 24px;
+    width: 260px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.35s ease;
+    backdrop-filter: blur(8px);
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+  }
+  .project-card:hover {
+    border-color: rgba(130, 87, 229, 0.6);
+    transform: translateY(-8px);
+    box-shadow: 0 16px 48px rgba(130, 87, 229, 0.15);
+  }
+  .project-icon {
+    font-size: 3.2em;
+    line-height: 1;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 0 16px rgba(130, 87, 229, 0.3));
+  }
+  .project-name {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .project-card::after {
+    content: attr(data-desc);
+    display: block;
+    font-size: 0.8em;
+    color: #777;
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 600px) {
+    header { padding: 28px 16px 12px; }
+    .projects { padding: 20px 16px 40px; gap: 16px; }
+    .project-card { width: 100%; max-width: 320px; padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 组件：页头（由 JS 注入） -->
+<div id="header-placeholder"></div>
+
+<div class="projects" id="projectsContainer">
+  <!-- 由 JS 根据 projects.json 动态渲染 -->
+</div>
+
+<!-- 组件：页脚（由 JS 注入） -->
+<div id="footer-placeholder"></div>
+
+<script>
+  // 加载组件
+  async function loadComponent(id, url) {
+    const res = await fetch(url);
+    const html = await res.text();
+    document.getElementById(id).outerHTML = html;
+  }
+
+  // 加载项目数据并渲染卡片
+  async function loadProjects() {
+    const res = await fetch('/components/projects.json');
+    const data = await res.json();
+    const container = document.getElementById('projectsContainer');
+    container.innerHTML = data.projects.map(p => `
+      <a class="project-card" href="${p.id}/" data-desc="${p.desc}">
+        <span class="project-icon">${p.icon}</span>
+        <span class="project-name">${p.name}</span>
+      </a>
+    `).join('');
+  }
+
+  Promise.all([
+    loadComponent('header-placeholder', '/components/header.html'),
+    loadComponent('footer-placeholder', '/components/footer.html'),
+    loadProjects()
+  ]);
+</script>
+
+</body>
+</html>

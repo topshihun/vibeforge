@@ -1,0 +1,45 @@
+# 以 . 开头的文件都忽略（除了 .gitignore）
+.*
+!.gitignore
+
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# bun compiled binaries
+vibeforge-server.exe
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+# 以下已在顶部被 .* 覆盖，保留作为明确说明
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+# 以下已在顶部被 .* 覆盖，保留作为明确说明
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+# 以下已在顶部被 .* 覆盖，保留作为明确说明
+.idea
+
+# Finder (MacOS) folder config
+# 以下已在顶部被 .* 覆盖，保留作为明确说明
+.DS_Store
