@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>飞机大战 — VibeForge</title>
+<base href="/plane-war/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== 简报室 · 主菜单 ===== -->
+<div class="briefing" id="mainMenu">
+  <div class="briefing-overlay"></div>
+  <div class="briefing-panel">
+    <div class="panel-border top-left"></div>
+    <div class="panel-border top-right"></div>
+    <div class="panel-border bot-left"></div>
+    <div class="panel-border bot-right"></div>
+
+    <div class="briefing-header">
+      <span class="tag">OP: THUNDER STRIKE</span>
+      <span class="tag right">CLASSIFIED</span>
+    </div>
+
+    <div class="briefing-insignia">✈️</div>
+    <h1 class="briefing-title">飞机大战</h1>
+    <p class="briefing-codename">任务代号：雷霆出击</p>
+
+    <div class="briefing-divider">
+      <span class="divider-line"></span>
+      <span class="divider-dot">◆</span>
+      <span class="divider-line"></span>
+    </div>
+
+    <div class="briefing-body">
+      <div class="briefing-row">
+        <span class="label">状态</span>
+        <span class="value" id="briefStatus">待命</span>
+      </div>
+      <div class="briefing-row">
+        <span class="label">最高分</span>
+        <span class="value" id="briefHighScore">—</span>
+      </div>
+      <div class="briefing-row">
+        <span class="label">难度等级</span>
+        <span class="value" id="briefMode">—</span>
+      </div>
+    </div>
+
+    <div class="briefing-select" id="modeSelect">
+      <p class="briefing-instruction">选择难度等级</p>
+      <div class="briefing-modes">
+        <button class="briefing-mode selected" data-mode="easy" onclick="selectMode('easy')">
+          <span class="mode-rank">TRAINEE</span>
+          <span class="mode-name">🌱 简单</span>
+          <span class="mode-desc">敌机稀疏 · 适合新手</span>
+        </button>
+        <button class="briefing-mode" data-mode="normal" onclick="selectMode('normal')">
+          <span class="mode-rank">VETERAN</span>
+          <span class="mode-name">⚡ 普通</span>
+          <span class="mode-desc">节奏适中 · 颇具挑战</span>
+        </button>
+        <button class="briefing-mode" data-mode="hard" onclick="selectMode('hard')">
+          <span class="mode-rank">ACE</span>
+          <span class="mode-name">🔥 困难</span>
+          <span class="mode-desc">弹幕地狱 · 强者试炼</span>
+        </button>
+      </div>
+    </div>
+
+    <button class="briefing-launch" onclick="menuStartGame()">
+      <span class="launch-icon">▶</span>
+      <span class="launch-text">起飞</span>
+    </button>
+
+    <div class="briefing-footer">
+      <span>VIBEFORGE · 第 7 航空团</span>
+      <a href="../" class="briefing-back">◄ 返回总部</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 驾驶舱 · 游戏区域 ===== -->
+<div class="cockpit" id="gameArea" style="display:none">
+  <div class="cockpit-frame">
+    <!-- HUD 顶栏 -->
+    <div class="hud-bar">
+      <div class="hud-item">
+        <span class="hud-label">SCORE</span>
+        <span class="hud-value" id="score">0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">HI-SCORE</span>
+        <span class="hud-value" id="bestScore">0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">LIVES</span>
+        <span class="hud-value" id="hp">❤❤❤</span>
+      </div>
+    </div>
+
+    <!-- 雷达/画布区域 -->
+    <div class="radar-screen" id="canvasWrapper">
+      <div class="radar-corner tl"></div>
+      <div class="radar-corner tr"></div>
+      <div class="radar-corner bl"></div>
+      <div class="radar-corner br"></div>
+      <canvas id="gameCanvas" width="480" height="640"></canvas>
+      <div class="hud-crosshair"></div>
+
+      <!-- Game Over -->
+      <div class="cockpit-overlay" id="gameOverOverlay">
+        <div class="cockpit-overlay-box danger">
+          <h2 class="overlay-title" id="gameOverTitle">MISSION FAILED</h2>
+          <div class="overlay-stats" id="gameOverInfo"></div>
+          <div class="overlay-actions">
+            <button class="cockpit-btn" onclick="startGame()">RETRY</button>
+            <button class="cockpit-btn secondary" onclick="backToMenu()">EXIT</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pause -->
+      <div class="cockpit-overlay" id="pauseOverlay">
+        <div class="cockpit-overlay-box">
+          <h2 class="overlay-title" style="color:#00ccff">MISSION PAUSED</h2>
+          <div class="overlay-actions">
+            <button class="cockpit-btn" onclick="togglePause()">RESUME</button>
+            <button class="cockpit-btn secondary" onclick="backToMenu()">ABORT</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD 底栏：控制提示 -->
+    <div class="hud-bar bottom" id="controlsHint"></div>
+  </div>
+
+  <!-- 移动端触摸控制 -->
+  <div class="cockpit-dpad">
+    <div class="dpad-row">
+      <button class="dpad-btn" ontouchstart="movePlayerDir(0,-1)" onmousedown="movePlayerDir(0,-1)" ontouchend="stopPlayerMove()" onmouseup="stopPlayerMove()">▲</button>
+    </div>
+    <div class="dpad-row">
+      <button class="dpad-btn" ontouchstart="movePlayerDir(-1,0)" onmousedown="movePlayerDir(-1,0)" ontouchend="stopPlayerMove()" onmouseup="stopPlayerMove()">◀</button>
+      <button class="dpad-btn fire" ontouchstart="playerFire()" onmousedown="playerFire()">●</button>
+      <button class="dpad-btn" ontouchstart="movePlayerDir(1,0)" onmousedown="movePlayerDir(1,0)" ontouchend="stopPlayerMove()" onmouseup="stopPlayerMove()">▶</button>
+    </div>
+    <div class="dpad-row">
+      <button class="dpad-btn" ontouchstart="movePlayerDir(0,1)" onmousedown="movePlayerDir(0,1)" ontouchend="stopPlayerMove()" onmouseup="stopPlayerMove()">▼</button>
+    </div>
+  </div>
+
+<script src="js/constants.js"></script>
+<script src="js/game.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/input.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
