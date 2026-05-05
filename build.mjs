@@ -24,27 +24,31 @@ mkdirSync("dist", { recursive: true });
 const projectsJson = JSON.parse(readFileSync("components/projects.json", "utf-8"));
 const projectIds = projectsJson.projects.map(p => p.id);
 
+// Collect built projects for _redirects generation
+const builtProjects = [];
+
 // ===== Process each subproject =====
 for (const pid of projectIds) {
   const projectDir = pid;
   if (!existsSync(projectDir)) {
-    console.warn(`⚠  Skipping "${pid}" — directory not found`);
+    console.warn(`  ⚠  Skipping "${pid}" — directory not found`);
     continue;
   }
 
-  if (hasBuildScript(projectDir)) {
+  const isBuilt = hasBuildScript(projectDir);
+
+  if (isBuilt) {
     // ---- Built project (React/TS etc.) ----
-    console.log(`🔨 ${pid}: building with bun...`);
+    builtProjects.push(pid);
+    console.log(`  📦 ${pid} — installing & building...`);
     await $`cd ${projectDir} && bun install --frozen-lockfile`.quiet();
     await $`cd ${projectDir} && bun run build`.quiet();
 
-    // Copy dist output
     const srcDist = path.join(projectDir, "dist");
     if (existsSync(srcDist)) {
       cpSync(srcDist, path.join("dist", projectDir), { recursive: true });
-      console.log(`   ✅ ${pid}: build output copied`);
     } else {
-      console.warn(`   ⚠  ${pid}: no dist/ after build`);
+      console.warn(`  ⚠  ${pid}: no dist/ after build`);
     }
     continue;
   }
@@ -52,7 +56,7 @@ for (const pid of projectIds) {
   // ---- Simple project (vanilla JS) ----
   const htmlPath = path.join(projectDir, "index.html");
   if (!existsSync(htmlPath)) {
-    console.warn(`⚠  Skipping "${pid}" — no index.html`);
+    console.warn(`  ⚠  Skipping "${pid}" — no index.html`);
     continue;
   }
 
@@ -67,43 +71,51 @@ for (const pid of projectIds) {
   }
 
   if (scriptSrcs.length > 0) {
-    // Concatenate JS files in HTML order
     let combinedJs = "";
     for (const src of scriptSrcs) {
       const jsPath = path.join(projectDir, src);
       if (existsSync(jsPath)) {
         combinedJs += readFileSync(jsPath, "utf-8") + "\n";
       } else {
-        console.warn(`⚠  Missing JS file: ${jsPath}`);
+        console.warn(`  ⚠  Missing: ${jsPath}`);
       }
     }
 
-    // Write bundled JS
     const jsOutDir = path.join("dist", projectDir, "js");
     mkdirSync(jsOutDir, { recursive: true });
     write(path.join(jsOutDir, "app.js"), combinedJs);
 
-    // Replace all <script src="..."></script> tags with one bundled tag
     html = html.replace(/<script\s+src="[^"]+"><\/script>\s*/g, "");
     html = html.replace(
       "</body>",
-      '<!-- JS (combined in build) -->\n<script src="js/app.js"></script>\n</body>'
+      '<!-- JS (combined) -->\n<script src="js/app.js"></script>\n</body>'
     );
 
-    console.log(`   📦 ${pid}: ${scriptSrcs.length} JS files → 1 bundle`);
+    console.log(`  📦 ${pid} — ${scriptSrcs.length} JS files → 1 bundle`);
   }
 
-  // Write processed HTML
   const htmlOutDir = path.join("dist", projectDir);
   mkdirSync(htmlOutDir, { recursive: true });
   write(path.join(htmlOutDir, "index.html"), html);
 
-  // Copy style.css if present
   const cssPath = path.join(projectDir, "style.css");
   if (existsSync(cssPath)) {
     write(path.join(htmlOutDir, "style.css"), file(cssPath));
   }
 }
+
+// ===== Generate _redirects =====
+let redirects = "# Cloudflare Pages redirects\n\n";
+for (const pid of projectIds) {
+  redirects += `/${pid}    /${pid}/    301\n`;
+}
+if (builtProjects.length > 0) {
+  redirects += "\n# SPA fallback for built projects\n";
+  for (const pid of builtProjects) {
+    redirects += `/${pid}/*    /${pid}/index.html    200\n`;
+  }
+}
+write("dist/_redirects", redirects);
 
 // ===== Copy root static files =====
 const staticFiles = [
@@ -116,8 +128,10 @@ const staticFiles = [
 ];
 
 for (const f of staticFiles) {
+  // _redirects is already generated above
+  if (f === "_redirects") continue;
   mkdirSync(path.dirname(`dist/${f}`), { recursive: true });
   write(`dist/${f}`, file(f));
 }
 
-console.log(`✅ Build complete — ${projectIds.length} subproject(s), dist/ ready for static hosting`);
+console.log(`\n  ✅ Build complete — ${projectIds.length} subproject(s), dist/ ready`);
