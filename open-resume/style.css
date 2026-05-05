@@ -133,7 +133,7 @@ body {
 }
 
 /* ── Floating Button ── */
-.fab-container { position: fixed; right: 24px; bottom: 24px; z-index: 100; }
+.fab-container { position: fixed; right: 24px; bottom: 24px; z-index: 100; display: flex; flex-direction: column; align-items: center; }
 .fab-toggle {
   width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff;
   border: none; font-size: 22px; cursor: pointer; box-shadow: 0 4px 12px rgba(24,144,255,.4);
@@ -152,6 +152,7 @@ body {
 .fab-item.pdf { background: #ff4d4f; color: #fff; }
 .fab-item.json { background: #52c41a; color: #fff; }
 .fab-item.import { background: #faad14; color: #fff; }
+.fab-item.home { background: var(--primary); color: #fff; margin-bottom: 10px; }
 
 /* ── Toast ── */
 .toast {
