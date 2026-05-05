@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>简历制作</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+  <!-- Editor Panel -->
+  <div class="editor" id="editor">
+    <h2>📄 简历编辑</h2>
+
+    <div class="form-group">
+      <label>姓名</label>
+      <input type="text" id="f-name" placeholder="输入姓名">
+    </div>
+
+    <div class="form-group">
+      <label>简历照片</label>
+      <div class="photo-upload" id="photo-zone">
+        <div id="photo-empty">📷 点击或拖拽上传照片<br><small>支持 PNG/JPG/GIF</small></div>
+        <div class="photo-preview" id="photo-preview" style="display:none">
+          <img id="photo-img" src="" alt="照片">
+          <button class="btn btn-danger btn-sm" id="photo-del">删除</button>
+        </div>
+      </div>
+      <input type="file" id="photo-input" accept="image/*" style="display:none">
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">联系方式</div>
+    <div id="contacts-container"></div>
+    <button class="btn btn-block" id="add-contact" style="margin-top:6px">+ 添加联系方式</button>
+
+    <div class="divider"></div>
+    <div class="form-group">
+      <label>个人简介</label>
+      <textarea id="f-summary" rows="4" placeholder="输入个人简介"></textarea>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">工作经历</div>
+    <div id="experience-container"></div>
+    <button class="btn btn-block" id="add-experience" style="margin-top:6px">+ 添加工作经历</button>
+
+    <div class="divider"></div>
+    <div class="section-label">教育背景</div>
+    <div id="education-container"></div>
+    <button class="btn btn-block" id="add-education" style="margin-top:6px">+ 添加教育背景</button>
+
+    <div class="divider"></div>
+    <div class="section-label">技能</div>
+    <div id="skills-container"></div>
+    <button class="btn btn-block" id="add-skill" style="margin-top:6px">+ 添加技能</button>
+
+    <div class="divider"></div>
+    <div class="section-label">项目经历</div>
+    <div id="projects-container"></div>
+    <button class="btn btn-block" id="add-project" style="margin-top:6px">+ 添加项目经历</button>
+  </div>
+
+  <!-- Preview Panel -->
+  <div class="preview" id="preview-panel">
+    <div class="pages-stack" id="pages-stack"></div>
+  </div>
+</div>
+
+<!-- Floating Action Button -->
+<div class="fab-container">
+  <div class="fab-menu" id="fab-menu">
+    <button class="fab-item pdf" title="导出PDF" id="btn-pdf">📥</button>
+    <button class="fab-item json" title="导出JSON" id="btn-export-json">💾</button>
+    <button class="fab-item import" title="导入JSON" id="btn-import">📂</button>
+  </div>
+  <button class="fab-toggle" id="fab-toggle">+</button>
+  <input type="file" id="import-input" accept=".json" style="display:none">
+</div>
+
+<!-- Hidden measurement container for multi-page layout -->
+<div class="measure-box" id="measure-box"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

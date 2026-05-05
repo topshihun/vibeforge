@@ -38,9 +38,8 @@ serve({
 
     if (pathname === "/") pathname = "/index.html";
 
-    // Try dist/ first (built output), then root (sources)
-    let file = await tryServe(distDir, pathname);
-    if (!file) file = await tryServe(rootDir, pathname);
+    // Dev mode: serve from root sources only
+    let file = await tryServe(rootDir, pathname);
     if (!file) {
       return new Response(`404: ${pathname}`, { status: 404, headers: { "Content-Type": "text/plain" } });
     }
