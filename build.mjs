@@ -1,11 +1,22 @@
-// Build script — auto-discovers subprojects from projects.json,
-// concatenates JS files, copies static files as-is.
+// Build script — auto-discovers subprojects from projects.json.
+// Simple projects: concatenates JS files from <script src="...">, copies CSS.
+// Built projects (package.json with "build" script): runs bun install + bun run build, copies dist/.
 
-const { write, file } = Bun;
-const { mkdirSync, rmSync, readFileSync, readdirSync, existsSync } = require("fs");
+const { write, file, $ } = Bun;
+const { mkdirSync, rmSync, readFileSync, existsSync, cpSync } = require("fs");
 const path = require("path");
 
-// Clean dist
+// ===== Helpers =====
+function hasBuildScript(projectDir) {
+  const pkgPath = path.join(projectDir, "package.json");
+  if (!existsSync(pkgPath)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    return typeof pkg.scripts?.build === "string";
+  } catch { return false; }
+}
+
+// ===== Clean dist =====
 rmSync("dist", { recursive: true, force: true });
 mkdirSync("dist", { recursive: true });
 
@@ -21,6 +32,24 @@ for (const pid of projectIds) {
     continue;
   }
 
+  if (hasBuildScript(projectDir)) {
+    // ---- Built project (React/TS etc.) ----
+    console.log(`🔨 ${pid}: building with bun...`);
+    await $`cd ${projectDir} && bun install --frozen-lockfile`.quiet();
+    await $`cd ${projectDir} && bun run build`.quiet();
+
+    // Copy dist output
+    const srcDist = path.join(projectDir, "dist");
+    if (existsSync(srcDist)) {
+      cpSync(srcDist, path.join("dist", projectDir), { recursive: true });
+      console.log(`   ✅ ${pid}: build output copied`);
+    } else {
+      console.warn(`   ⚠  ${pid}: no dist/ after build`);
+    }
+    continue;
+  }
+
+  // ---- Simple project (vanilla JS) ----
   const htmlPath = path.join(projectDir, "index.html");
   if (!existsSync(htmlPath)) {
     console.warn(`⚠  Skipping "${pid}" — no index.html`);

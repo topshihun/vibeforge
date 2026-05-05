@@ -1,0 +1,453 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  color-scheme: light;
+  color: #213547;
+  background-color: #ffffff;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* 主应用容器 */
+.app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* 悬浮球组件样式 */
+.floating-action-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+}
+
+/* 简历容器 */
+.resume-container {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+}
+
+/* 左边编辑区 */
+.resume-editor {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background-color: #f5f5f5;
+  border-right: 1px solid #e8e8e8;
+}
+
+/* 右边预览区 */
+.resume-preview {
+  flex: 1;
+  padding: 20px;
+  overflow: auto;
+  background-color: #f0f0f0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* A4尺寸预览容器 */
+.resume-preview-content {
+  width: 210mm;
+  min-height: 297mm;
+  background: white;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  margin: 0 auto;
+  overflow: visible;
+}
+
+/* 预览头部 */
+.preview-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.contact-info {
+  margin-top: 10px;
+}
+
+/* 预览 section */
+.preview-section {
+  margin-bottom: 30px;
+}
+
+/* 预览项目样式 */
+.preview-item {
+  margin-bottom: 20px;
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.item-position {
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.item-description {
+  line-height: 1.6;
+  color: #666;
+}
+
+.item-period {
+  font-size: 14px;
+  color: #888;
+}
+
+/* 技能标签样式 */
+.skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 确保卡片宽度适应容器 */
+.ant-card {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* 预览内容样式 */
+.resume-preview-content {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  line-height: 1.6;
+  padding: 15mm;
+  background: white;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  width: 210mm;
+  min-height: 297mm;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+/* 预览头部样式 */
+.preview-header {
+  margin-bottom: 40px;
+  position: relative;
+  padding-bottom: 20px;
+}
+
+.preview-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #333333;
+  border-radius: 2px;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 30px;
+}
+
+.photo-container {
+  flex-shrink: 0;
+}
+
+.resume-photo {
+  width: 120px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 3px solid #ffffff;
+}
+
+/* 确保照片在黑白打印时清晰 */
+@media print {
+  .resume-photo {
+    filter: grayscale(100%);
+    border: 2px solid #000000;
+  }
+}
+
+.info-container {
+  flex: 1;
+  min-width: 300px;
+}
+
+.info-container h2 {
+  margin-bottom: 8px;
+  color: #000000;
+  font-weight: 700;
+}
+
+.contact-info {
+  margin-top: 15px;
+  font-size: 14px;
+  color: #333333;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.contact-info span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.contact-info span::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background-color: #333333;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+/* 标题样式 */
+.preview-section h4 {
+  margin-bottom: 20px;
+  color: #000000;
+  position: relative;
+  padding-left: 20px;
+  font-weight: 600;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 8px;
+}
+
+.preview-section h4::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 20px;
+  background: #333333;
+  border-radius: 2px;
+}
+
+/* 工作经历和教育背景项目样式 */
+.preview-item {
+  margin-bottom: 25px;
+  position: relative;
+  padding-left: 24px;
+}
+
+.preview-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 10px;
+  height: 10px;
+  background-color: #333333;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #333333;
+}
+
+.preview-item::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 22px;
+  width: 2px;
+  height: calc(100% + 10px);
+  background-color: #cccccc;
+}
+
+.preview-item:last-child::after {
+  display: none;
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.item-header strong {
+  color: #000000;
+  font-weight: 600;
+}
+
+.item-position {
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #333333;
+  font-size: 14px;
+}
+
+.item-description {
+  line-height: 1.6;
+  color: #333333;
+  font-size: 14px;
+  padding-left: 4px;
+}
+
+.item-period {
+  font-size: 13px;
+  color: #666666;
+  background-color: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+}
+
+/* 技能标签样式增强 */
+.skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.skills-list span {
+  background: #f0f0f0;
+  color: #333333;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #e0e0e0;
+}
+
+/* 个人简介样式 */
+.preview-section:first-of-type .preview-item {
+  padding-left: 0;
+}
+
+.preview-section:first-of-type .preview-item::before,
+.preview-section:first-of-type .preview-item::after {
+  display: none;
+}
+
+.preview-section:first-of-type .item-description {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #333333;
+  background-color: #f9f9f9;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #333333;
+}
+
+/* 打印样式优化 */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .resume-editor {
+    display: none;
+  }
+  
+  .export-button {
+    display: none;
+  }
+  
+
+  
+  .preview-header::after {
+    background: #000000;
+  }
+  
+  .preview-section h4 {
+    border-bottom: 1px solid #000000;
+  }
+  
+  .skills-list span {
+    background: #ffffff;
+    border: 1px solid #000000;
+  }
+  
+  .preview-section:first-of-type .item-description {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .resume-container {
+    flex-direction: column;
+  }
+  
+  .resume-editor,
+  .resume-preview {
+    height: 50vh;
+  }
+  
+  .item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  
+  .item-period {
+    align-self: flex-start;
+  }
+}
+
+/* 编辑区样式优化 */
+.resume-editor .ant-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+}
+
+/* 按钮样式 */
+.export-button .ant-btn {
+  border-radius: 4px;
+}
+
+/* 表单项间距 */
+.resume-editor .ant-form-item {
+  margin-bottom: 16px;
+}
+
+/* 工作经历和教育背景卡片样式 */
+.resume-editor .ant-card {
+  transition: all 0.3s ease;
+}
+
+.resume-editor .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
