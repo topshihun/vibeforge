@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>编码与解码器 — VibeForge</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+<base href="/encode-decode/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <!-- 标题区 -->
+  <div class="header">
+    <div class="logo">🔐</div>
+    <h1 class="title">编码与解码器</h1>
+    <p class="subtitle">MD5 · Base64 · URL · SHA1 · SHA256 · 十六进制</p>
+    <a href="../" class="back-link">← 返回 VibeForge</a>
+  </div>
+
+  <!-- 模式选择标签 -->
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-mode="md5">MD5</button>
+    <button class="tab" data-mode="sha1">SHA1</button>
+    <button class="tab" data-mode="sha256">SHA256</button>
+    <button class="tab" data-mode="base64">Base64</button>
+    <button class="tab" data-mode="url">URL</button>
+    <button class="tab" data-mode="hex">十六进制</button>
+  </div>
+
+  <!-- 输入区 -->
+  <div class="card">
+    <div class="card-label" id="inputLabel">输入文本</div>
+    <textarea class="textarea" id="inputText" placeholder="请输入要编码/解码的文本..." spellcheck="false"></textarea>
+  </div>
+
+  <!-- 操作按钮（仅编解码类模式显示） -->
+  <div class="action-row" id="actionRow">
+    <button class="btn btn-primary" id="encodeBtn">编码 →</button>
+    <button class="btn btn-secondary" id="decodeBtn">解码 ←</button>
+  </div>
+
+  <!-- 输出区 -->
+  <div class="card">
+    <div class="card-label" id="outputLabel">输出结果</div>
+    <textarea class="textarea" id="outputText" placeholder="结果将显示在这里..." readonly spellcheck="false"></textarea>
+    <button class="btn btn-small" id="copyBtn">📋 复制结果</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
