@@ -1,0 +1,382 @@
+/* === 全局 === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  background: #0a0a1a;
+  color: #e0e0e0;
+  font-family: 'Microsoft YaHei', -apple-system, sans-serif;
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(98, 0, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0, 200, 255, 0.08) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 12px 8px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* === 顶栏（紧凑） === */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(130, 87, 229, 0.1);
+}
+.topbar-logo {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #aaa;
+  letter-spacing: 0.5px;
+}
+.back-link {
+  font-size: 0.78em;
+  color: #667;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.back-link:hover { color: #c4b5fd; }
+
+/* === 架构行（独占一行） === */
+.arch-row {
+  margin-bottom: 12px;
+}
+.arch-row .config-group {
+  min-width: 0;
+}
+
+/* === 配置行 === */
+.config-row {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.config-group {
+  flex: 1;
+  min-width: 160px;
+}
+.config-group-btn {
+  flex: 0 0 auto;
+  min-width: auto;
+}
+.config-label {
+  display: block;
+  font-size: 0.75em;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.select, .input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 87, 229, 0.2);
+  background: rgba(10, 10, 26, 0.7);
+  color: #e0e0e0;
+  font-size: 0.88em;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.select:focus, .input:focus {
+  border-color: rgba(130, 87, 229, 0.5);
+}
+.select option {
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+/* === 按钮 === */
+.btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.88em;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #8257e5, #6d3fd1);
+  color: #fff;
+}
+.btn-primary:hover { box-shadow: 0 0 20px rgba(130, 87, 229, 0.3); transform: translateY(-1px); }
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.btn-tiny {
+  padding: 4px 10px;
+  font-size: 0.75em;
+  background: rgba(130, 87, 229, 0.12);
+  color: #c4b5fd;
+  border: 1px solid rgba(130, 87, 229, 0.2);
+  border-radius: 6px;
+  font-weight: 500;
+}
+.btn-tiny:hover { background: rgba(130, 87, 229, 0.2); }
+
+/* === 左右分栏 === */
+.split-panel {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.split-panel > .editor-section,
+.split-panel > .output-section {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* === 区域通用 === */
+.editor-section, .output-section {
+  margin-bottom: 16px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.section-label {
+  font-size: 0.8em;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.status-badge {
+  font-size: 0.7em;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  font-weight: 500;
+}
+.status-badge.error {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+.status-badge.busy {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+  animation: blink 0.8s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* === 编辑器与输出容器 === */
+.editor-wrap, .output-wrap {
+  display: flex;
+  background: linear-gradient(145deg, rgba(30, 30, 60, 0.7), rgba(20, 20, 40, 0.9));
+  border: 1px solid rgba(130, 87, 229, 0.15);
+  border-radius: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.editor-wrap { overflow: hidden; }
+.output-wrap { overflow: auto; }
+
+/* === 行号 === */
+.line-numbers {
+  flex: 0 0 44px;
+  padding: 14px 8px;
+  text-align: right;
+  color: #444;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.82em;
+  line-height: 1.6;
+  border-right: 1px solid rgba(130, 87, 229, 0.1);
+  background: rgba(0, 0, 0, 0.15);
+  user-select: none;
+  white-space: pre;
+  overflow: hidden;
+}
+
+/* === 代码输入 === */
+.code-input {
+  flex: 1;
+  padding: 14px 12px;
+  background: transparent;
+  color: #e0e0e0;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.82em;
+  line-height: 1.6;
+  border: none;
+  outline: none;
+  resize: none;
+  tab-size: 4;
+}
+.code-input::placeholder { color: #444; }
+
+/* === 汇编输出 === */
+.asm-output {
+  flex: 1;
+  padding: 14px 12px;
+  margin: 0;
+  background: transparent;
+  color: #e0e0e0;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.82em;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+.asm-output code {
+  font-family: inherit;
+}
+
+/* 汇编语法高亮 — 基本颜色 */
+.asm-output .keyword { color: #c792ea; }
+.asm-output .mnemonic { color: #82aaff; }
+.asm-output .register { color: #f78c6c; }
+.asm-output .number { color: #f07178; }
+.asm-output .label { color: #ffcb6b; }
+.asm-output .comment { color: #546e7a; }
+.asm-output .directive { color: #89ddff; }
+.asm-output .string { color: #c3e88d; }
+
+/* === 架构徽章 === */
+.arch-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.arch-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(30, 30, 60, 0.5);
+  border: 1px solid rgba(130, 87, 229, 0.12);
+  font-size: 0.8em;
+  color: #aaa;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.arch-badge.active {
+  border-color: rgba(130, 87, 229, 0.4);
+  color: #c4b5fd;
+  background: rgba(130, 87, 229, 0.1);
+}
+.arch-badge .arch-icon {
+  font-size: 1.2em;
+}
+
+/* 滚动条 */
+.code-input::-webkit-scrollbar,
+.asm-output::-webkit-scrollbar,
+.line-numbers::-webkit-scrollbar { width: 6px; }
+.code-input::-webkit-scrollbar-track,
+.asm-output::-webkit-scrollbar-track,
+.line-numbers::-webkit-scrollbar-track { background: transparent; }
+.code-input::-webkit-scrollbar-thumb,
+.asm-output::-webkit-scrollbar-thumb,
+.line-numbers::-webkit-scrollbar-thumb { background: rgba(130, 87, 229, 0.2); border-radius: 3px; }
+.code-input::-webkit-scrollbar-thumb:hover,
+.asm-output::-webkit-scrollbar-thumb:hover { background: rgba(130, 87, 229, 0.35); }
+
+/* 高亮开关 */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.75em;
+  color: #888;
+  font-weight: 500;
+}
+.toggle-text {
+  letter-spacing: 0.5px;
+}
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(130, 87, 229, 0.2);
+  border-radius: 20px;
+  transition: background 0.25s;
+  border: 1px solid rgba(130, 87, 229, 0.15);
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 2px;
+  top: 2px;
+  background: #666;
+  border-radius: 50%;
+  transition: all 0.25s;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: rgba(130, 87, 229, 0.5);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+  background: #c4b5fd;
+}
+
+/* === 响应式 === */
+@media (max-width: 640px) {
+  .container { padding: 20px 12px 40px; }
+  .config-row { flex-direction: column; }
+  .config-group { min-width: 100%; }
+  .config-group-btn { align-self: stretch; }
+  .config-group-btn .btn { width: 100%; }
+  .split-panel { flex-direction: column; }
+  .line-numbers { flex-basis: 32px; font-size: 0.75em; }
+  .code-input, .asm-output { font-size: 0.75em; }
+}

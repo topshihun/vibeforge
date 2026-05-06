@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>编译器实验室 — VibeForge</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+<base href="/compiler-lab/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <!-- 标题栏（紧凑） -->
+  <div class="topbar">
+    <span class="topbar-logo">🧠 编译器实验室</span>
+    <a href="../" class="back-link">← 返回</a>
+  </div>
+
+  <!-- 架构行 - 独占一行 -->
+  <div class="arch-row">
+    <div class="config-group config-group-arch">
+      <label class="config-label">架构</label>
+      <div class="arch-badges" id="archBadges"></div>
+    </div>
+  </div>
+
+  <!-- 配置行 -->
+  <div class="config-row">
+    <div class="config-group">
+      <label class="config-label">编译器</label>
+      <select class="select" id="compilerSelect">
+        <option value="">加载中...</option>
+      </select>
+    </div>
+    <div class="config-group">
+      <label class="config-label">编译选项</label>
+      <input class="input" id="flagsInput" type="text" value="-O2" placeholder="-O2 -Wall">
+    </div>
+    <div class="config-group config-group-btn">
+      <button class="btn btn-primary" id="compileBtn">⚡ 编译</button>
+    </div>
+  </div>
+
+  <!-- 左右分栏：左代码 + 右汇编 -->
+  <div class="split-panel">
+    <!-- C 代码编辑器 -->
+    <div class="editor-section">
+      <div class="section-header">
+        <span class="section-label">C 源代码</span>
+        <div class="header-actions">
+          <button class="btn btn-tiny" id="loadExampleBtn">📂 加载示例</button>
+          <button class="btn btn-tiny" id="clearBtn">🗑️ 清空</button>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <div class="line-numbers" id="lineNumbers">1</div>
+        <textarea class="code-input" id="codeInput" spellcheck="false" placeholder="// 在这里编写 C 代码...&#10;int main() {&#10;    return 0;&#10;}">int fib(int n) {
+    if (n <= 1) return n;
+    return fib(n - 1) + fib(n - 2);
+}
+
+int main() {
+    return fib(10);
+}</textarea>
+      </div>
+    </div>
+
+    <!-- 汇编输出 -->
+    <div class="output-section">
+      <div class="section-header">
+        <span class="section-label">汇编输出</span>
+        <span class="status-badge" id="statusBadge">就绪</span>
+        <label class="toggle-label" title="切换符号说明（寄存器、标签、伪指令着色）">
+          <span class="toggle-text">符号说明</span>
+          <div class="toggle-switch">
+            <input type="checkbox" id="highlightToggle">
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        <div class="header-actions">
+          <button class="btn btn-tiny" id="copyBtn">📋 复制</button>
+          <button class="btn btn-tiny" id="downloadBtn">⬇ 下载</button>
+        </div>
+      </div>
+      <div class="output-wrap">
+        <div class="line-numbers" id="asmLineNumbers"></div>
+        <pre class="asm-output" id="asmOutput"><code>点击「编译」按钮查看汇编代码</code></pre>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

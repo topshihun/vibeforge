@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>俄罗斯方块 — VibeForge</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+<base href="/tetris/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 主菜单 -->
+<div class="main-menu" id="mainMenu">
+  <div class="menu-content">
+    <div class="menu-logo">🧱</div>
+    <h1 class="menu-title">俄罗斯方块</h1>
+    <p class="menu-subtitle">经典益智 · 永不过时</p>
+    <button class="menu-start-btn" onclick="menuStartGame()">开始游戏</button>
+    <div class="menu-controls-hint">
+      方向键移动 · ⬆旋转 · 空格硬降 · P 暂停
+    </div>
+    <a href="/" class="menu-home-link">🏠 返回主页</a>
+  </div>
+</div>
+
+<!-- 游戏界面 -->
+<div class="game-container" id="gameContainer" style="display:none">
+  <div class="game-layout">
+
+    <!-- 左侧信息 -->
+    <div class="side-panel left-panel">
+      <a href="/" class="home-icon" title="返回主页">🏠</a>
+      <div class="info-box">
+        <div class="info-label">分数</div>
+        <div class="info-value" id="score">0</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">等级</div>
+        <div class="info-value" id="level">1</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">行数</div>
+        <div class="info-value" id="lines">0</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">最高分</div>
+        <div class="info-value" id="bestScore">0</div>
+      </div>
+    </div>
+
+    <!-- 主游戏板 -->
+    <div class="board-wrapper">
+      <canvas id="gameCanvas"></canvas>
+      <!-- 暂停覆盖层 -->
+      <div class="overlay" id="pauseOverlay" style="display:none">
+        <h2>⏸ 暂停</h2>
+        <p>按 P 键继续</p>
+        <button onclick="backToMenu()">返回菜单</button>
+        <button class="btn-secondary" onclick="location.href='/'">返回主页</button>
+      </div>
+      <!-- 游戏结束覆盖层 -->
+      <div class="overlay game-over" id="gameOverOverlay" style="display:none">
+        <h2>💥 游戏结束</h2>
+        <p>得分: <span id="finalScore">0</span></p>
+        <p>等级: <span id="finalLevel">1</span></p>
+        <button onclick="restartGame()">再来一局</button>
+        <button class="btn-secondary" onclick="backToMenu()">返回菜单</button>
+      </div>
+    </div>
+
+    <!-- 右侧信息 -->
+    <div class="side-panel right-panel">
+      <div class="info-box">
+        <div class="info-label">下一个</div>
+        <canvas id="nextCanvas" width="120" height="120"></canvas>
+      </div>
+      <div class="controls-hint">
+        <p><kbd>←</kbd> <kbd>→</kbd> 移动</p>
+        <p><kbd>↑</kbd> 旋转</p>
+        <p><kbd>↓</kbd> 加速</p>
+        <p><kbd>空格</kbd> 硬降</p>
+        <p><kbd>P</kbd> 暂停</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 移动端控制 -->
+  <div class="mobile-controls">
+    <div class="mobile-row">
+      <button class="mobile-btn" onclick="moveLeft()">←</button>
+      <button class="mobile-btn" onclick="rotatePiece()">↻</button>
+      <button class="mobile-btn" onclick="moveRight()">→</button>
+    </div>
+    <div class="mobile-row">
+      <button class="mobile-btn mobile-btn-wide" onclick="hardDrop()">⬇ 硬降</button>
+    </div>
+  </div>
+</div>
+
+<!-- JS 模块（顺序依赖） -->
+<script src="js/constants.js"></script>
+<script src="js/game.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/input.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

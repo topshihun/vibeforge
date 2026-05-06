@@ -1,0 +1,278 @@
+/* ===== VibeForge · 俄罗斯方块子项目样式 ===== */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0f0f23;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Microsoft YaHei', sans-serif;
+  color: #eee;
+}
+
+/* ===== 主菜单 ===== */
+.main-menu {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 24px;
+  background:
+    radial-gradient(ellipse at 20% 30%, #2a0a3a 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 70%, #0a1a3a 0%, transparent 60%),
+    #0f0f23;
+}
+.menu-content {
+  text-align: center;
+  animation: fadeInUp 0.8s ease-out;
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.menu-logo {
+  font-size: clamp(4em, 12vw, 7em);
+  line-height: 1;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 0 30px #aa66ff44);
+  animation: logoFloat 3s ease-in-out infinite;
+}
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.menu-title {
+  font-size: clamp(2em, 7vw, 4em);
+  color: #aa66ff;
+  text-shadow: 0 0 30px #aa66ff55, 0 0 60px #aa66ff22;
+  letter-spacing: 8px;
+  margin-bottom: 4px;
+}
+.menu-subtitle {
+  font-size: clamp(0.85em, 2vw, 1.1em);
+  color: #667;
+  margin-bottom: 24px;
+  letter-spacing: 3px;
+}
+.menu-start-btn {
+  font-size: clamp(1em, 2.5vw, 1.3em);
+  padding: 14px 48px;
+  background: linear-gradient(135deg, #aa66ff, #8844dd);
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 4px;
+  box-shadow: 0 0 30px #aa66ff33;
+  transition: all 0.3s;
+  margin-bottom: 28px;
+}
+.menu-start-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 50px #aa66ff66;
+}
+.menu-controls-hint {
+  color: #556;
+  font-size: clamp(0.75em, 1.5vw, 0.9em);
+  letter-spacing: 1px;
+}
+.menu-home-link {
+  display: inline-block;
+  margin-top: 20px;
+  color: #667;
+  text-decoration: none;
+  font-size: 0.9em;
+  transition: color 0.2s;
+}
+.menu-home-link:hover { color: #aa66ff; }
+
+/* ===== 返回到主页面图标 ===== */
+.home-icon {
+  display: block;
+  text-align: center;
+  font-size: 1.4em;
+  text-decoration: none;
+  padding: 6px 0;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+.home-icon:hover { opacity: 1; }
+
+/* ===== 游戏界面 ===== */
+.game-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse at 30% 20%, #1a0a2a 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 80%, #0a1a2a 0%, transparent 60%),
+    #0f0f23;
+}
+.game-layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  flex: 1 1 auto;
+}
+
+/* ===== 侧面板 ===== */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 100px;
+}
+.info-box {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: center;
+  animation: fadeInUp 0.6s ease-out;
+}
+.info-label {
+  font-size: 0.75em;
+  color: #667;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.info-value {
+  font-size: 1.6em;
+  font-weight: bold;
+  color: #aa66ff;
+  text-shadow: 0 0 20px #aa66ff44;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 游戏面板 ===== */
+.board-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#gameCanvas {
+  border-radius: 8px;
+  box-shadow: 0 0 40px rgba(170,102,255,0.15), inset 0 0 40px rgba(0,0,0,0.3);
+}
+
+/* ===== 下一个预览 ===== */
+#nextCanvas {
+  display: block;
+  margin: 4px auto;
+  width: 120px;
+  height: 120px;
+}
+
+/* ===== 操作提示 ===== */
+.controls-hint {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.78em;
+  color: #556;
+  line-height: 1.8;
+}
+.controls-hint kbd {
+  display: inline-block;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.85em;
+  color: #889;
+  font-family: inherit;
+}
+
+/* ===== 覆盖层 ===== */
+.overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+.overlay h2 {
+  color: #aa66ff;
+  margin-bottom: 12px;
+  font-size: clamp(1.2em, 3vw, 1.6em);
+  text-shadow: 0 0 20px #aa66ff44;
+}
+.overlay p {
+  margin-bottom: 4px;
+  font-size: clamp(0.9em, 1.5vw, 1.1em);
+  color: #aaa;
+}
+.overlay button {
+  margin-top: 12px;
+  padding: 10px 32px;
+  font-size: clamp(0.9em, 1.5vw, 1em);
+  background: #aa66ff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 2px;
+  transition: background 0.2s;
+}
+.overlay button:hover { background: #8844dd; }
+.overlay .btn-secondary {
+  background: rgba(255,255,255,0.08);
+  color: #aaa;
+  margin-left: 8px;
+}
+.overlay .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+
+/* ===== 移动端 ===== */
+.mobile-controls {
+  display: none;
+  margin-top: 8px;
+}
+.mobile-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.mobile-btn {
+  width: 56px;
+  height: 48px;
+  font-size: 1.2em;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #ccc;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.mobile-btn:active { background: rgba(170,102,255,0.3); }
+.mobile-btn-wide {
+  width: 120px;
+}
+
+@media (max-width: 640px) {
+  .mobile-controls { display: flex; flex-direction: column; align-items: center; }
+  .controls-hint { display: none; }
+  .left-panel .info-box { padding: 8px 10px; }
+  .left-panel .info-value { font-size: 1.2em; }
+  .right-panel .info-box { padding: 8px 10px; }
+}
