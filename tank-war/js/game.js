@@ -143,14 +143,15 @@ function showLevelTitle() {
   el.textContent = cfg.label;
   el.style.display = 'block';
   el.style.opacity = '1';
+  // 缩短显示时长：原先 1500ms → 500ms，让游戏内容更快可见
   setTimeout(() => {
-    el.style.transition = 'opacity 0.8s ease';
+    el.style.transition = 'opacity 0.4s ease';
     el.style.opacity = '0';
     setTimeout(() => {
       el.style.display = 'none';
       el.style.transition = '';
-    }, 800);
-  }, 1500);
+    }, 400);
+  }, 500);
 }
 
 // ---- 开始游戏 ----
