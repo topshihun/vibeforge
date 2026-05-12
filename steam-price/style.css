@@ -1,0 +1,412 @@
+/* === Steam 价格查询工具样式 === */
+
+/* === 全局 === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a1a;
+  color: #e0e0e0;
+  font-family: 'Microsoft YaHei', -apple-system, sans-serif;
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(98, 0, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0, 200, 255, 0.08) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+/* === 标题 === */
+.header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.logo {
+  font-size: 3em;
+  filter: drop-shadow(0 0 24px rgba(130, 87, 229, 0.4));
+  animation: pulse 3s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+.title {
+  font-size: clamp(1.6em, 5vw, 2.2em);
+  font-weight: 800;
+  background: linear-gradient(135deg, #8257e5, #00c8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 8px 0 4px;
+}
+.subtitle {
+  font-size: 0.85em;
+  color: #666;
+  letter-spacing: 2px;
+}
+.back-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 0.85em;
+  color: #667;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.back-link:hover { color: #c4b5fd; }
+
+/* === 卡片 === */
+.card {
+  background: linear-gradient(145deg, rgba(30, 30, 60, 0.7), rgba(20, 20, 40, 0.9));
+  border: 1px solid rgba(130, 87, 229, 0.15);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+  backdrop-filter: blur(8px);
+}
+.card-label {
+  font-size: 0.8em;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+/* === 搜索行 === */
+.search-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.search-input {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 87, 229, 0.15);
+  background: rgba(10, 10, 26, 0.6);
+  color: #e0e0e0;
+  font-size: 1em;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.search-input:focus { border-color: rgba(130, 87, 229, 0.5); }
+.search-input::placeholder { color: #444; }
+
+/* === 货币标签 === */
+.currency-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.currency-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.currency-tag {
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(130, 87, 229, 0.2);
+  background: transparent;
+  color: #888;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.25s;
+  font-family: inherit;
+}
+.currency-tag:hover {
+  border-color: rgba(130, 87, 229, 0.5);
+  color: #bbb;
+}
+.currency-tag.active {
+  background: rgba(130, 87, 229, 0.2);
+  border-color: rgba(130, 87, 229, 0.6);
+  color: #c4b5fd;
+  box-shadow: 0 0 16px rgba(130, 87, 229, 0.15);
+}
+
+/* === 推荐游戏标签页 === */
+.featured-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.featured-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(130, 87, 229, 0.15);
+  background: rgba(30, 30, 60, 0.5);
+  color: #888;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: all 0.25s;
+  font-family: inherit;
+  font-weight: 600;
+  text-align: center;
+}
+.featured-tab:hover {
+  border-color: rgba(130, 87, 229, 0.4);
+  color: #bbb;
+  background: rgba(30, 30, 60, 0.8);
+}
+.featured-tab.active {
+  background: rgba(130, 87, 229, 0.15);
+  border-color: rgba(130, 87, 229, 0.5);
+  color: #c4b5fd;
+  box-shadow: 0 0 16px rgba(130, 87, 229, 0.1);
+}
+
+/* === 按钮 === */
+.btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #8257e5, #6d3fd1);
+  color: #fff;
+}
+.btn-primary:hover { box-shadow: 0 0 20px rgba(130, 87, 229, 0.3); transform: translateY(-1px); }
+
+/* === 加载状态 === */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: #888;
+  font-size: 0.9em;
+}
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(130, 87, 229, 0.15);
+  border-top: 3px solid #8257e5;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* === 错误提示 === */
+.error-card {
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.error-icon { font-size: 1.5em; }
+.error-msg { color: #f87171; font-size: 0.9em; }
+
+/* === 结果卡片 === */
+.game-card {
+  background: linear-gradient(145deg, rgba(30, 30, 60, 0.7), rgba(20, 20, 40, 0.9));
+  border: 1px solid rgba(130, 87, 229, 0.15);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 12px;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+.game-card:hover {
+  border-color: rgba(130, 87, 229, 0.35);
+}
+.game-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.game-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+.game-info {
+  flex: 1;
+  min-width: 0;
+}
+.game-name {
+  font-size: 1em;
+  font-weight: 700;
+  color: #e8e0f0;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-meta {
+  font-size: 0.78em;
+  color: #666;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.game-meta span { display: inline-flex; align-items: center; gap: 3px; }
+.game-meta .released { color: #888; }
+.game-meta .rating { color: #4ade80; }
+.game-meta .rating.mixed { color: #facc15; }
+.game-meta .rating.negative { color: #f87171; }
+
+/* === 价格行 === */
+.game-price-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(130, 87, 229, 0.08);
+  flex-wrap: wrap;
+}
+.price-current {
+  font-size: 1.3em;
+  font-weight: 800;
+  color: #c4b5fd;
+}
+.price-original {
+  font-size: 0.85em;
+  color: #666;
+  text-decoration: line-through;
+}
+.discount-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  color: #0a0a1a;
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.price-free {
+  color: #4ade80;
+  font-weight: 700;
+}
+.price-na {
+  color: #555;
+  font-size: 0.85em;
+}
+
+/* === 史低价格 === */
+.price-history-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+}
+.historical-low {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #fbbf24;
+}
+.historical-low .label { color: #888; }
+.lowest-ever {
+  color: #fbbf24;
+  font-weight: 700;
+}
+.match-current {
+  color: #4ade80;
+  font-size: 0.8em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(74, 222, 128, 0.1);
+}
+
+/* === 多币种价格详情 === */
+.game-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(130, 87, 229, 0.08);
+  display: none;
+}
+.game-card.expanded .game-detail { display: block; }
+
+.currency-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.currency-table th {
+  text-align: left;
+  padding: 6px 10px;
+  color: #666;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(130, 87, 229, 0.1);
+  font-size: 0.85em;
+}
+.currency-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(130, 87, 229, 0.05);
+}
+.currency-table tr:last-child td { border-bottom: none; }
+.currency-table .curr-code { color: #888; }
+.currency-table .curr-price { color: #e0e0e0; font-weight: 600; }
+.currency-table .curr-low { color: #fbbf24; font-weight: 600; }
+.currency-table .curr-sale {
+  color: #4ade80;
+  font-size: 0.85em;
+}
+.currency-table .curr-na { color: #444; }
+.expand-btn {
+  margin-top: 8px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(130, 87, 229, 0.2);
+  background: rgba(130, 87, 229, 0.08);
+  color: #c4b5fd;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.expand-btn:hover { background: rgba(130, 87, 229, 0.15); }
+
+/* === 无结果 === */
+.no-results {
+  text-align: center;
+  padding: 40px 20px;
+  color: #555;
+}
+.no-results .icon { font-size: 2.5em; margin-bottom: 12px; }
+.no-results .text { font-size: 0.95em; }
+
+/* === 响应式 === */
+@media (max-width: 600px) {
+  .container { padding: 20px 12px 40px; }
+  .search-row { flex-direction: column; }
+  .btn { width: 100%; }
+  .game-card-header { flex-wrap: wrap; }
+  .game-thumb { width: 50px; height: 50px; }
+  .currency-row { flex-direction: column; align-items: flex-start; }
+  .game-price-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+}

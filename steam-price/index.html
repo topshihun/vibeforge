@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steam 价格查询 — VibeForge</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💲</text></svg>">
+<base href="/steam-price/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <!-- 标题区 -->
+  <div class="header">
+    <div class="logo">💲</div>
+    <h1 class="title">Steam 价格查询</h1>
+    <p class="subtitle">多币种游戏价格 · 史低价格追踪</p>
+    <a href="../" class="back-link">← 返回 VibeForge</a>
+  </div>
+
+  <!-- 搜索区 -->
+  <div class="card">
+    <div class="search-row">
+      <input type="text" class="search-input" id="searchInput" placeholder="输入游戏名称搜索..." autocomplete="off" spellcheck="false">
+      <button class="btn btn-primary" id="searchBtn">🔍 搜索</button>
+    </div>
+  </div>
+
+  <!-- 货币选择 -->
+  <div class="card">
+    <div class="currency-row">
+      <span class="card-label">显示货币：</span>
+      <div class="currency-tags" id="currencyTags">
+        <button class="currency-tag active" data-cc="cn">🇨🇳 CNY</button>
+        <button class="currency-tag" data-cc="us">🇺🇸 USD</button>
+        <button class="currency-tag" data-cc="de">🇪🇺 EUR</button>
+        <button class="currency-tag" data-cc="jp">🇯🇵 JPY</button>
+        <button class="currency-tag" data-cc="gb">🇬🇧 GBP</button>
+        <button class="currency-tag" data-cc="kr">🇰🇷 KRW</button>
+        <button class="currency-tag" data-cc="ru">🇷🇺 RUB</button>
+        <button class="currency-tag" data-cc="br">🇧🇷 BRL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 推荐游戏标签 -->
+  <div class="featured-tabs" id="featuredTabs">
+    <button class="featured-tab active" data-category="top_sellers">🌟 热门游戏</button>
+    <button class="featured-tab" data-category="specials">🏷️ 打折游戏</button>
+  </div>
+
+  <!-- 加载状态 -->
+  <div class="loading" id="loading" style="display:none;">
+    <div class="spinner"></div>
+    <span>正在查询中，请稍候...</span>
+  </div>
+
+  <!-- 结果区 -->
+  <div class="results" id="results"></div>
+
+  <!-- 错误提示 -->
+  <div class="error-card" id="errorCard" style="display:none;">
+    <div class="error-icon">⚠️</div>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
