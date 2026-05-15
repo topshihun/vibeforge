@@ -138,15 +138,46 @@ const featuredTabsEl = $('featuredTabs');
 
 // ===== 工具函数 =====
 
-/** CORS 代理包装（Steam/CheapShark API 不支持浏览器跨域请求） */
+/** CORS 代理列表（Steam/CheapShark API 不支持浏览器跨域请求） */
 const CORS_PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => url, // 最后的兜底：直接请求
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
 ];
-let proxyIndex = 0;
 
-// ===== 网络重试工具 =====
+// ===== 网络请求工具 =====
+
+/** 带超时的 fetch（默认 5s 超时） */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json', ...options.headers },
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 并发尝试所有 CORS 代理，返回第一个成功的响应（最快 ~4s，最慢 ~5s） */
+async function proxyFetch(url, options = {}) {
+  const proxiedUrls = CORS_PROXIES.map(fn => fn(url));
+  const promises = proxiedUrls.map(proxiedUrl =>
+    fetchWithTimeout(proxiedUrl, options, 5000).then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    })
+  );
+  const results = await Promise.allSettled(promises);
+  for (const r of results) {
+    if (r.status === 'fulfilled') return r.value;
+  }
+  // 全部失败，抛最后一条错误
+  throw results[results.length - 1].reason;
+}
 
 /** 图片加载重试（指数退避，网络不稳定时自动重试最多 maxRetries 次） */
 async function retryLoadImage(img, src, maxRetries = 3) {
@@ -172,47 +203,6 @@ async function retryLoadImage(img, src, maxRetries = 3) {
   img.onerror = null;
   img.src = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 231 87%22><rect fill=%22%231a1a2e%22 width=%22231%22 height=%2287%22/><text x=%22115%22 y=%2248%22 text-anchor=%22middle%22 fill=%22%23444%22 font-size=%2220%22>🎮</text></svg>`;
   img.alt = '加载失败';
-}
-
-/** 内部代理请求（递归切换代理，不含自动重试） */
-async function _proxyFetch(url, options = {}) {
-  const proxiedUrl = CORS_PROXIES[proxyIndex](url);
-  try {
-    const res = await fetch(proxiedUrl, {
-      ...options,
-      headers: { 'Accept': 'application/json', ...options.headers },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res;
-  } catch (err) {
-    if (proxyIndex < CORS_PROXIES.length - 1) {
-      proxyIndex++;
-      return _proxyFetch(url, options);
-    }
-    throw err;
-  }
-}
-
-/** 带自动重试的代理请求（网络不稳定时退避重试，最多 3 轮） */
-async function proxyFetch(url, options = {}) {
-  let lastErr;
-  for (let attempt = 0; attempt <= 2; attempt++) {
-    try {
-      return await _proxyFetch(url, options);
-    } catch (err) {
-      lastErr = err;
-      // TypeError = 网络连接失败；HTTP 5xx = 服务器临时错误 → 可重试
-      const isRetryable = err instanceof TypeError
-        || (err.message && /^HTTP (5|0)/.test(err.message));
-      if (!isRetryable) throw err;
-      if (attempt < 2) {
-        proxyIndex = 0; // 重置代理索引，从头开始
-        const delay = 1500 * Math.pow(2, attempt) + Math.random() * 1000;
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-  }
-  throw lastErr;
 }
 
 /** 格式化价格（分 → 元，处理 Steam API 返回的整数分） */
@@ -316,15 +306,31 @@ async function getCheapestPrice(steamAppId) {
   return isNaN(cheapest) ? null : cheapest;
 }
 
-/** 获取 USD 对其他货币的汇率 */
+/** 获取 USD 对其他货币的汇率（localStorage 缓存 1 小时） */
 async function fetchExchangeRates() {
-  if (state.exchangeRates) return state.exchangeRates; // 缓存
+  if (state.exchangeRates) return state.exchangeRates; // 内存缓存
+
+  // localStorage 缓存检查
+  const CACHE_KEY = 'steam_exchange_rates';
+  const cached = localStorage.getItem(CACHE_KEY);
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed.time && Date.now() - parsed.time < 3600000) {
+        state.exchangeRates = parsed.rates || {};
+        return state.exchangeRates;
+      }
+    } catch { /* 失效则重新获取 */ }
+  }
+
   try {
     const url = 'https://open.er-api.com/v6/latest/USD';
     const res = await proxyFetch(url);
     if (!res.ok) throw new Error(`汇率接口失败 (${res.status})`);
     const data = await res.json();
     state.exchangeRates = data.rates || {};
+    // 写入 localStorage 缓存
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), rates: state.exchangeRates }));
     return state.exchangeRates;
   } catch {
     state.exchangeRates = {};
@@ -378,11 +384,8 @@ async function loadFeatured(cc) {
   renderInlineLoading(resultsEl);
 
   try {
-    // 并行获取：推荐数据 + 汇率
-    const [featuredData] = await Promise.all([
-      fetchFeatured(cc, state.lang),
-      fetchExchangeRates(),
-    ]);
+    // 获取推荐数据（汇率延后加载）
+    const featuredData = await fetchFeatured(cc, state.lang);
 
     // 视图守卫：如果用户中途切换到了搜索，放弃渲染
     if (state.view !== 'featured') return;
@@ -467,10 +470,7 @@ async function doSearch() {
   renderInlineLoading(resultsEl);
 
   try {
-    const [items] = await Promise.all([
-      searchSteamGames(query, state.lang),
-      fetchExchangeRates(),
-    ]);
+    const items = await searchSteamGames(query, state.lang);
 
     if (items.length === 0) {
       state.search.loading = false;
