@@ -325,7 +325,9 @@ async function getSteamPrice(appId, cc) {
 
 /** CheapShark — 获取史低价格（返回 USD）
  *  先查 games 端点拿 cheapestDealID，再查 deals 端点拿真正的 cheapestPrice（历史最低价）
- *  如果 deals 端点的 cheapestPrice 无 price 字段，降级使用 games 端点的 cheapest（当前最低） */
+ *  如果 deals 端点的 cheapestPrice 无 price 字段，降级使用 games 端点的 cheapest（当前最低）
+ *
+ *  注意：cheapestDealID 已含 URL 编码字符（如 %2F），直接拼接即可，不可再次 encodeURIComponent！ */
 async function getHistoricalLow(steamAppId) {
   // 第一步：查 game 信息获取 cheapestDealID
   const gameUrl = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
@@ -338,15 +340,17 @@ async function getHistoricalLow(steamAppId) {
   if (!dealId) return null;
 
   // 第二步：查 deal 详情获取历史最低价
-  const dealUrl = `https://www.cheapshark.com/api/1.0/deals?id=${encodeURIComponent(dealId)}`;
+  // ⚠ 不要 encodeURIComponent(dealId) — cheapestDealID 已编码，双重编码会导致 404
+  const dealUrl = `https://www.cheapshark.com/api/1.0/deals?id=${dealId}`;
   const dealRes = await proxyFetch(dealUrl);
-  if (!dealRes.ok) return null;
-  const dealData = await dealRes.json();
-  // 优先取 cheapestPrice.price（真正的史低）
-  const historicPrice = parseFloat(dealData?.cheapestPrice?.price);
-  if (!isNaN(historicPrice)) return historicPrice;
+  if (dealRes.ok) {
+    const dealData = await dealRes.json();
+    // 优先取 cheapestPrice.price（真正的史低）
+    const historicPrice = parseFloat(dealData?.cheapestPrice?.price);
+    if (!isNaN(historicPrice)) return historicPrice;
+  }
 
-  // 降级：cheapestPrice 无 price 字段（如仅含 date），用 games 端点的 cheapest（当前最低价）
+  // 降级：deals 失败或无 cheapestPrice.price，用 games 端点的 cheapest（当前最低价）
   const currentCheapest = parseFloat(entry.cheapest);
   return isNaN(currentCheapest) ? null : currentCheapest;
 }
