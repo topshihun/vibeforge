@@ -275,13 +275,41 @@ function renderInlineError(container, message) {
 
 // ===== API 调用 =====
 
-/** Steam Store 搜索 */
+/** Steam Store 搜索（快速匹配，按游戏标题检索） */
 async function searchSteamGames(query, lang = 'en') {
   const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=us&l=${lang}`;
   const res = await proxyFetch(url);
   if (!res.ok) throw new Error(`Steam 搜索失败 (${res.status})`);
   const data = await res.json();
   return data.items || [];
+}
+
+/** Steam Store 完整搜索（降级使用，支持标签/描述匹配）
+ *  当 storesearch 返回 0 结果时调用此函数，
+ *  使用 store.steampowered.com/search 的 JSON 端点获取更多结果 */
+async function searchSteamStoreFull(query, lang = 'en') {
+  const url = `https://store.steampowered.com/search/results/?term=${encodeURIComponent(query)}&cc=us&l=${lang}&category1=998&json=1&count=50`;
+  const res = await proxyFetch(url);
+  if (!res.ok) throw new Error(`Steam 完整搜索失败 (${res.status})`);
+  const data = await res.json();
+  if (!data || !Array.isArray(data.items)) return [];
+  return data.items.map(item => {
+    // 从 logo URL 中提取 app ID: .../apps/123456/capsule_sm_120.jpg
+    const appIdMatch = item.logo?.match(/\/apps\/(\d+)\//);
+    const id = appIdMatch ? parseInt(appIdMatch[1], 10) : null;
+    if (!id) return null;
+    return {
+      id,
+      name: item.name || `App ${id}`,
+      tiny_image: null,
+      header_image: '',
+      metacritic_score: null,
+      steam_rating_percent: null,
+      release_date: null,
+      price: null,
+      _fromFullSearch: true, // 标记来源，用于后续可能的补充
+    };
+  }).filter(Boolean);
 }
 
 /** Steam AppDetails — 获取指定货币的价格 */
@@ -490,8 +518,11 @@ async function doSearch() {
     const items = await searchSteamGames(query, state.lang);
 
     if (items.length === 0) {
-      state.search.loading = false;
-      state.search.results = [];
+      // 降级：使用完整搜索接口（支持标签/描述匹配，搜中文关键词更准确）
+      const fullItems = await searchSteamStoreFull(query, state.lang);
+      if (fullItems.length === 0) {
+        state.search.loading = false;
+        state.search.results = [];
         resultsEl.innerHTML = `
           <div class="no-results">
             <div class="icon">🔍</div>
@@ -499,6 +530,9 @@ async function doSearch() {
           </div>`;
         return;
       }
+      // 用完整搜索结果继续
+      items.push(...fullItems);
+    }
 
       // 视图守卫：如果用户中途切换到了推荐，放弃渲染
       if (state.view !== 'search') return;
