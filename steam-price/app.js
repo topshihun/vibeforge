@@ -295,15 +295,25 @@ async function getSteamPrice(appId, cc) {
   return app.data?.price_overview || null;
 }
 
-/** CheapShark — 获取史低价格（返回 USD） */
-async function getCheapestPrice(steamAppId) {
-  const url = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
-  const res = await proxyFetch(url);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!Array.isArray(data) || data.length === 0) return null;
-  const cheapest = parseFloat(data[0].cheapest);
-  return isNaN(cheapest) ? null : cheapest;
+/** CheapShark — 获取史低价格（返回 USD）
+ *  先查 games 端点拿 cheapestDealID，再查 deals 端点拿真正的 cheapestPrice（历史最低价） */
+async function getHistoricalLow(steamAppId) {
+  // 第一步：查 game 信息获取 cheapestDealID
+  const gameUrl = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
+  const gameRes = await proxyFetch(gameUrl);
+  if (!gameRes.ok) return null;
+  const gameData = await gameRes.json();
+  if (!Array.isArray(gameData) || gameData.length === 0) return null;
+  const dealId = gameData[0].cheapestDealID;
+  if (!dealId) return null;
+
+  // 第二步：查 deal 详情获取历史最低价
+  const dealUrl = `https://www.cheapshark.com/api/1.0/deals?id=${encodeURIComponent(dealId)}`;
+  const dealRes = await proxyFetch(dealUrl);
+  if (!dealRes.ok) return null;
+  const dealData = await dealRes.json();
+  const historicPrice = parseFloat(dealData?.cheapestPrice?.price);
+  return isNaN(historicPrice) ? null : historicPrice;
 }
 
 /** 获取 USD 对其他货币的汇率（localStorage 缓存 1 小时） */
@@ -653,8 +663,8 @@ async function loadHistoryLow(appId, card) {
   if (!historyEl) return;
 
   try {
-    const cheapestUsd = await getCheapestPrice(appId);
-    if (cheapestUsd === null) {
+    const lowestUsd = await getHistoricalLow(appId);
+    if (lowestUsd === null) {
       historyEl.innerHTML = ``;
       return;
     }
@@ -664,7 +674,7 @@ async function loadHistoryLow(appId, card) {
     const symbol = getCurrencySymbol(currencyCode);
 
     // 如果汇率已加载，显示本地货币史低
-    const localPrice = formatUsdToLocal(cheapestUsd, currencyCode);
+    const localPrice = formatUsdToLocal(lowestUsd, currencyCode);
     if (localPrice !== null) {
       historyEl.innerHTML = `
         <span class="historical-low">
@@ -676,7 +686,7 @@ async function loadHistoryLow(appId, card) {
       historyEl.innerHTML = `
         <span class="historical-low">
           <span class="label">📉 史低 (USD):</span>
-          <span class="lowest-ever">$${cheapestUsd.toFixed(2)}</span>
+          <span class="lowest-ever">$${lowestUsd.toFixed(2)}</span>
         </span>`;
     }
   } catch {
@@ -746,8 +756,8 @@ async function loadDetailPrices(appId, card) {
 /** 详情中的史低价格（各币种独立换算） */
 async function loadDetailHistoryLows(appId, detailEl) {
   try {
-    const cheapestUsd = await getCheapestPrice(appId);
-    if (cheapestUsd === null) {
+    const lowestUsd = await getHistoricalLow(appId);
+    if (lowestUsd === null) {
       CC_CURRENCIES.forEach(ccInfo => {
         const cell = detailEl.querySelector(`#detail-low-${appId}-${ccInfo.cc}`);
         if (cell) cell.textContent = 'N/A';
@@ -760,13 +770,13 @@ async function loadDetailHistoryLows(appId, detailEl) {
       const cell = detailEl.querySelector(`#detail-low-${appId}-${ccInfo.cc}`);
       if (!cell) return;
 
-      const localPrice = formatUsdToLocal(cheapestUsd, ccInfo.code);
+      const localPrice = formatUsdToLocal(lowestUsd, ccInfo.code);
       if (localPrice !== null) {
         const symbol = getCurrencySymbol(ccInfo.code);
         cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">${symbol}${localPrice}</span>`;
         cell.className = 'curr-low';
       } else {
-        cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">$${cheapestUsd.toFixed(2)}</span>`;
+        cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">$${lowestUsd.toFixed(2)}</span>`;
         cell.className = 'curr-low';
       }
     });
