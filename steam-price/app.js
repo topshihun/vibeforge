@@ -21,31 +21,79 @@ const CC_CURRENCIES = [
   { cc: 'br', flag: '🇧🇷', code: 'BRL', name: '雷亚尔' },
 ];
 
-/** Steam 搜索语言代码 — 与 navigator.language 映射 */
+/** Steam 搜索语言代码 — 全部 33 种支持的语言 */
 const LANGUAGES = [
-  { code: 'en',     flag: '🇺🇸', label: 'English',       native: 'English' },
-  { code: 'zh_CN',  flag: '🇨🇳', label: '简体中文',     native: '简体中文' },
-  { code: 'zh_TW',  flag: '🇹🇼', label: '繁體中文',     native: '繁體中文' },
-  { code: 'ja',     flag: '🇯🇵', label: '日本語',       native: '日本語' },
-  { code: 'ko',     flag: '🇰🇷', label: '한국어',       native: '한국어' },
-  { code: 'ru',     flag: '🇷🇺', label: 'Русский',      native: 'Русский' },
-  { code: 'de',     flag: '🇩🇪', label: 'Deutsch',      native: 'Deutsch' },
-  { code: 'fr',     flag: '🇫🇷', label: 'Français',     native: 'Français' },
-  { code: 'es',     flag: '🇪🇸', label: 'Español',      native: 'Español' },
+  { code: 'en',     flag: '🇺🇸', label: 'English',               native: 'English' },
+  { code: 'zh_CN',  flag: '🇨🇳', label: '简体中文 (中国)',      native: '简体中文' },
+  { code: 'zh_TW',  flag: '🇹🇼', label: '繁體中文 (台灣)',      native: '繁體中文' },
+  { code: 'ja',     flag: '🇯🇵', label: '日本語',                native: '日本語' },
+  { code: 'ko',     flag: '🇰🇷', label: '한국어',                native: '한국어' },
+  { code: 'ru',     flag: '🇷🇺', label: 'Русский',               native: 'Русский' },
+  { code: 'de',     flag: '🇩🇪', label: 'Deutsch',               native: 'Deutsch' },
+  { code: 'fr',     flag: '🇫🇷', label: 'Français',              native: 'Français' },
+  { code: 'es',     flag: '🇪🇸', label: 'Español',               native: 'Español' },
+  { code: 'es-419', flag: '🌎', label: 'Español (LATAM)',        native: 'Español (LATAM)' },
+  { code: 'it',     flag: '🇮🇹', label: 'Italiano',              native: 'Italiano' },
+  { code: 'nl',     flag: '🇳🇱', label: 'Nederlands',            native: 'Nederlands' },
+  { code: 'pt',     flag: '🇵🇹', label: 'Português',             native: 'Português' },
+  { code: 'pt_BR',  flag: '🇧🇷', label: 'Português (Brasil)',    native: 'Português (Brasil)' },
+  { code: 'pl',     flag: '🇵🇱', label: 'Polski',                native: 'Polski' },
+  { code: 'tr',     flag: '🇹🇷', label: 'Türkçe',                native: 'Türkçe' },
+  { code: 'th',     flag: '🇹🇭', label: 'ไทย',                   native: 'ไทย' },
+  { code: 'vi',     flag: '🇻🇳', label: 'Tiếng Việt',            native: 'Tiếng Việt' },
+  { code: 'cs',     flag: '🇨🇿', label: 'Čeština',               native: 'Čeština' },
+  { code: 'hu',     flag: '🇭🇺', label: 'Magyar',                native: 'Magyar' },
+  { code: 'ro',     flag: '🇷🇴', label: 'Română',                native: 'Română' },
+  { code: 'bg',     flag: '🇧🇬', label: 'Български',             native: 'Български' },
+  { code: 'uk',     flag: '🇺🇦', label: 'Українська',            native: 'Українська' },
+  { code: 'el',     flag: '🇬🇷', label: 'Ελληνικά',              native: 'Ελληνικά' },
+  { code: 'no',     flag: '🇳🇴', label: 'Norsk',                 native: 'Norsk' },
+  { code: 'sv',     flag: '🇸🇪', label: 'Svenska',               native: 'Svenska' },
+  { code: 'da',     flag: '🇩🇰', label: 'Dansk',                 native: 'Dansk' },
+  { code: 'fi',     flag: '🇫🇮', label: 'Suomi',                 native: 'Suomi' },
+  { code: 'ar',     flag: '🇸🇦', label: 'العربية',               native: 'العربية' },
+  { code: 'he',     flag: '🇮🇱', label: 'עברית',                 native: 'עברית' },
+  { code: 'id',     flag: '🇮🇩', label: 'Bahasa Indonesia',       native: 'Bahasa Indonesia' },
+  { code: 'ms',     flag: '🇲🇾', label: 'Bahasa Melayu',         native: 'Bahasa Melayu' },
+  { code: 'hi',     flag: '🇮🇳', label: 'हिन्दी',                native: 'हिन्दी' },
 ];
 
 /** 从浏览器语言推断 Steam 语言代码 */
 function detectDefaultLang() {
   const raw = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
   const map = {
-    'zh': 'zh_CN', 'zh-cn': 'zh_CN', 'zh-hans': 'zh_CN',
-    'zh-tw': 'zh_TW', 'zh-hk': 'zh_TW', 'zh-hant': 'zh_TW',
+    'zh': 'zh_CN', 'zh-cn': 'zh_CN', 'zh-hans': 'zh_CN', 'zh-sg': 'zh_CN',
+    'zh-tw': 'zh_TW', 'zh-hk': 'zh_TW', 'zh-mo': 'zh_TW', 'zh-hant': 'zh_TW',
     'ja': 'ja', 'ja-jp': 'ja',
     'ko': 'ko', 'ko-kr': 'ko',
     'ru': 'ru', 'ru-ru': 'ru',
     'de': 'de', 'de-de': 'de',
     'fr': 'fr', 'fr-fr': 'fr',
     'es': 'es', 'es-es': 'es',
+    'es-419': 'es-419', 'es-mx': 'es-419', 'es-ar': 'es-419',
+    'it': 'it', 'it-it': 'it',
+    'nl': 'nl', 'nl-nl': 'nl',
+    'pt': 'pt', 'pt-pt': 'pt',
+    'pt-br': 'pt_BR',
+    'pl': 'pl', 'pl-pl': 'pl',
+    'tr': 'tr', 'tr-tr': 'tr',
+    'th': 'th', 'th-th': 'th',
+    'vi': 'vi', 'vi-vn': 'vi',
+    'cs': 'cs', 'cs-cz': 'cs',
+    'hu': 'hu', 'hu-hu': 'hu',
+    'ro': 'ro', 'ro-ro': 'ro',
+    'bg': 'bg', 'bg-bg': 'bg',
+    'uk': 'uk', 'uk-ua': 'uk',
+    'el': 'el', 'el-gr': 'el',
+    'nb': 'no', 'nb-no': 'no', 'nn': 'no', 'nn-no': 'no', 'no': 'no', 'nb-no': 'no',
+    'sv': 'sv', 'sv-se': 'sv',
+    'da': 'da', 'da-dk': 'da',
+    'fi': 'fi', 'fi-fi': 'fi',
+    'ar': 'ar', 'ar-sa': 'ar',
+    'he': 'he', 'he-il': 'he',
+    'id': 'id', 'id-id': 'id',
+    'ms': 'ms', 'ms-my': 'ms',
+    'hi': 'hi', 'hi-in': 'hi',
   };
   return map[raw] || map[raw.split('-')[0]] || 'en';
 }
@@ -80,7 +128,8 @@ const state = {
 const $ = id => document.getElementById(id);
 const searchInput = $('searchInput');
 const searchBtn = $('searchBtn');
-const currencyTags = $('currencyTags');
+const currencySelect = $('currencySelect');
+const langSelect = $('langSelect');
 const resultsEl = $('results');
 const loadingEl = $('loading');
 const errorCard = $('errorCard');
@@ -510,7 +559,7 @@ function createGameCard(item) {
 
   // 点击展开/收起多币种详情
   card.addEventListener('click', (e) => {
-    if (e.target.closest('.expand-btn') || e.target.closest('.currency-tag')) return;
+    if (e.target.closest('.expand-btn')) return;
     card.classList.toggle('expanded');
     if (card.classList.contains('expanded') && !card.dataset.detailLoaded) {
       loadDetailPrices(id, card);
@@ -738,25 +787,20 @@ function escapeHtml(str) {
 
 // ===== 事件绑定 =====
 
-/** 切换货币标签 */
-function setupCurrencyTags() {
-  currencyTags.addEventListener('click', (e) => {
-    const tag = e.target.closest('.currency-tag');
-    if (!tag) return;
+/** 设置货币下拉选择框 */
+function setupCurrencySelect() {
+  if (!currencySelect) return;
+  currencySelect.innerHTML = CC_CURRENCIES.map(c =>
+    `<option value="${c.cc}" ${c.cc === state.cc ? 'selected' : ''}>${c.flag} ${c.code}</option>`
+  ).join('');
 
-    const cc = tag.dataset.cc;
+  currencySelect.addEventListener('change', () => {
+    const cc = currencySelect.value;
     if (cc === state.cc) return;
-
-    // 更新激活状态
-    currencyTags.querySelectorAll('.currency-tag').forEach(t => t.classList.remove('active'));
-    tag.classList.add('active');
     state.cc = cc;
-
     if (state.view === 'featured') {
-      // 重新拉取推荐数据（含新币种价格和新语言标题）
       loadFeatured(cc);
     } else {
-      // 搜索模式：重新加载所有卡片的价格
       const cards = resultsEl.querySelectorAll('.game-card');
       for (const card of cards) {
         const appId = card.dataset.appid;
@@ -766,35 +810,20 @@ function setupCurrencyTags() {
   });
 }
 
-/** 切换搜索语言 */
-function setupLanguageSelector() {
-  const langContainer = document.getElementById('langTags');
-  if (!langContainer) return;
+/** 设置语言下拉选择框 */
+function setupLangSelect() {
+  if (!langSelect) return;
+  langSelect.innerHTML = LANGUAGES.map(l =>
+    `<option value="${l.code}" ${l.code === state.lang ? 'selected' : ''}>${l.flag} ${l.native}</option>`
+  ).join('');
 
-  // 渲染语言标签按钮
-  langContainer.innerHTML = LANGUAGES.map(l => `
-    <button class="lang-tag ${l.code === state.lang ? 'active' : ''}" data-lang="${l.code}">
-      ${l.flag} ${l.native}
-    </button>
-  `).join('');
-
-  langContainer.addEventListener('click', (e) => {
-    const tag = e.target.closest('.lang-tag');
-    if (!tag) return;
-
-    const lang = tag.dataset.lang;
+  langSelect.addEventListener('change', () => {
+    const lang = langSelect.value;
     if (lang === state.lang) return;
-
-    // 更新激活状态
-    langContainer.querySelectorAll('.lang-tag').forEach(t => t.classList.remove('active'));
-    tag.classList.add('active');
     state.lang = lang;
-
-    // 根据当前视图刷新
     if (state.view === 'featured') {
       loadFeatured(state.cc);
     } else if (state.view === 'search' && state.search.query) {
-      // 用当前关键词重新搜索
       searchInput.value = state.search.query;
       doSearch();
     }
@@ -812,8 +841,8 @@ function setupSearch() {
 
 // ===== 初始化 =====
 async function init() {
-  setupCurrencyTags();
-  setupLanguageSelector();
+  setupCurrencySelect();
+  setupLangSelect();
   setupSearch();
   setupFeaturedTabs();
   await loadFeatured();

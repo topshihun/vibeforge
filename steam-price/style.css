@@ -91,64 +91,31 @@ body::before {
   text-transform: uppercase;
 }
 
-/* === 语言标签（竖排排列） === */
-.lang-tags {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.lang-tag {
-  padding: 6px 12px;
+/* === 下拉选择框 === */
+.sidebar-select {
+  width: 100%;
+  padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid rgba(130, 87, 229, 0.15);
-  background: transparent;
-  color: #888;
+  background: rgba(10, 10, 26, 0.8);
+  color: #e0e0e0;
   font-size: 0.8em;
-  cursor: pointer;
-  transition: all 0.25s;
   font-family: inherit;
-  text-align: left;
-}
-.lang-tag:hover {
-  border-color: rgba(130, 87, 229, 0.4);
-  color: #bbb;
-  background: rgba(130, 87, 229, 0.05);
-}
-.lang-tag.active {
-  background: rgba(130, 87, 229, 0.15);
-  border-color: rgba(130, 87, 229, 0.5);
-  color: #c4b5fd;
-  box-shadow: 0 0 12px rgba(130, 87, 229, 0.1);
-}
-
-/* === 货币标签（竖排排列） === */
-.currency-tags {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.currency-tag {
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(130, 87, 229, 0.15);
-  background: transparent;
-  color: #888;
-  font-size: 0.8em;
   cursor: pointer;
-  transition: all 0.25s;
-  font-family: inherit;
-  text-align: left;
+  outline: none;
+  transition: border-color 0.2s;
+  appearance: auto;
+  -webkit-appearance: auto;
 }
-.currency-tag:hover {
+.sidebar-select:hover {
   border-color: rgba(130, 87, 229, 0.4);
-  color: #bbb;
-  background: rgba(130, 87, 229, 0.05);
 }
-.currency-tag.active {
-  background: rgba(130, 87, 229, 0.15);
-  border-color: rgba(130, 87, 229, 0.5);
-  color: #c4b5fd;
-  box-shadow: 0 0 12px rgba(130, 87, 229, 0.1);
+.sidebar-select:focus {
+  border-color: rgba(130, 87, 229, 0.6);
+}
+.sidebar-select option {
+  background: #1a1a2e;
+  color: #e0e0e0;
 }
 
 /* === 推荐游戏标签（竖排） === */
@@ -477,22 +444,6 @@ body::before {
   .sidebar-section {
     flex: 1;
     min-width: 120px;
-  }
-  .currency-tags {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-  .currency-tag {
-    font-size: 0.72em;
-    padding: 4px 10px;
-  }
-  .lang-tags {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-  .lang-tag {
-    font-size: 0.72em;
-    padding: 4px 10px;
   }
   .featured-tabs {
     flex-direction: row;
