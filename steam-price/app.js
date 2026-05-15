@@ -61,7 +61,36 @@ const CORS_PROXIES = [
 ];
 let proxyIndex = 0;
 
-async function proxyFetch(url, options = {}) {
+// ===== 网络重试工具 =====
+
+/** 图片加载重试（指数退避，网络不稳定时自动重试最多 maxRetries 次） */
+async function retryLoadImage(img, src, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = src;
+        // 浏览器缓存命中时可能不触发事件
+        if (img.complete && img.naturalWidth > 0) resolve();
+      });
+      img.onerror = null; // 清除处理器
+      return; // 加载成功
+    } catch {
+      if (attempt >= maxRetries) break;
+      // 指数退避 + 随机抖动
+      const delay = 1000 * Math.pow(2, attempt) + Math.random() * 1000;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  // 全部重试失败 → 降级为占位图
+  img.onerror = null;
+  img.src = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 231 87%22><rect fill=%22%231a1a2e%22 width=%22231%22 height=%2287%22/><text x=%22115%22 y=%2248%22 text-anchor=%22middle%22 fill=%22%23444%22 font-size=%2220%22>🎮</text></svg>`;
+  img.alt = '加载失败';
+}
+
+/** 内部代理请求（递归切换代理，不含自动重试） */
+async function _proxyFetch(url, options = {}) {
   const proxiedUrl = CORS_PROXIES[proxyIndex](url);
   try {
     const res = await fetch(proxiedUrl, {
@@ -73,10 +102,32 @@ async function proxyFetch(url, options = {}) {
   } catch (err) {
     if (proxyIndex < CORS_PROXIES.length - 1) {
       proxyIndex++;
-      return proxyFetch(url, options);
+      return _proxyFetch(url, options);
     }
     throw err;
   }
+}
+
+/** 带自动重试的代理请求（网络不稳定时退避重试，最多 3 轮） */
+async function proxyFetch(url, options = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    try {
+      return await _proxyFetch(url, options);
+    } catch (err) {
+      lastErr = err;
+      // TypeError = 网络连接失败；HTTP 5xx = 服务器临时错误 → 可重试
+      const isRetryable = err instanceof TypeError
+        || (err.message && /^HTTP (5|0)/.test(err.message));
+      if (!isRetryable) throw err;
+      if (attempt < 2) {
+        proxyIndex = 0; // 重置代理索引，从头开始
+        const delay = 1500 * Math.pow(2, attempt) + Math.random() * 1000;
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 /** 格式化价格（分 → 元，处理 Steam API 返回的整数分） */
@@ -400,10 +451,12 @@ function createGameCard(item) {
       ? `https://shared.fastly.steamstatic.com/store_item_assets/steam/${tiny_image}`
       : `https://steamcdn-a.akamaihd.net/steam/apps/${id}/capsule_231x87.jpg`);
 
+  // 先用占位图初始化，随后异步重试加载真实图片
+  const placeholder = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 231 87%22><rect fill=%22%231a1a2e%22 width=%22231%22 height=%2287%22/><text x=%22115%22 y=%2248%22 text-anchor=%22middle%22 fill=%22%23333%22 font-size=%2220%22>🎮</text></svg>`;
+
   card.innerHTML = `
     <div class="game-card-header">
-      <img class="game-thumb" src="${thumbSrc}" alt="${escapeHtml(name)}" loading="lazy"
-           onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 231 87%22><rect fill=%22%231a1a2e%22 width=%22231%22 height=%2287%22/><text x=%22115%22 y=%2248%22 text-anchor=%22middle%22 fill=%22%23444%22 font-size=%2220%22>🎮</text></svg>'">
+      <img class="game-thumb" src="${placeholder}" alt="${escapeHtml(name)}" loading="lazy">
       <div class="game-info">
         <div class="game-name">${escapeHtml(name)}</div>
         <div class="game-meta">
@@ -427,6 +480,10 @@ function createGameCard(item) {
       loadDetailPrices(id, card);
     }
   });
+
+  // 异步重试加载真实图片（网络不稳定时自动重试，失败则保留占位图）
+  const img = card.querySelector('.game-thumb');
+  if (img) retryLoadImage(img, thumbSrc);
 
   // 如果已含价格数据（featured），直接渲染主货币价格
   if (item._hasPrice && price && price.final !== undefined) {
