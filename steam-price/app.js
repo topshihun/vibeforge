@@ -21,10 +21,46 @@ const CC_CURRENCIES = [
   { cc: 'br', flag: '🇧🇷', code: 'BRL', name: '雷亚尔' },
 ];
 
+/** Steam 搜索语言代码 — 与 navigator.language 映射 */
+const LANGUAGES = [
+  { code: 'en',     flag: '🇺🇸', label: 'English',       native: 'English' },
+  { code: 'zh_CN',  flag: '🇨🇳', label: '简体中文',     native: '简体中文' },
+  { code: 'zh_TW',  flag: '🇹🇼', label: '繁體中文',     native: '繁體中文' },
+  { code: 'ja',     flag: '🇯🇵', label: '日本語',       native: '日本語' },
+  { code: 'ko',     flag: '🇰🇷', label: '한국어',       native: '한국어' },
+  { code: 'ru',     flag: '🇷🇺', label: 'Русский',      native: 'Русский' },
+  { code: 'de',     flag: '🇩🇪', label: 'Deutsch',      native: 'Deutsch' },
+  { code: 'fr',     flag: '🇫🇷', label: 'Français',     native: 'Français' },
+  { code: 'es',     flag: '🇪🇸', label: 'Español',      native: 'Español' },
+];
+
+/** 从浏览器语言推断 Steam 语言代码 */
+function detectDefaultLang() {
+  const raw = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+  const map = {
+    'zh': 'zh_CN', 'zh-cn': 'zh_CN', 'zh-hans': 'zh_CN',
+    'zh-tw': 'zh_TW', 'zh-hk': 'zh_TW', 'zh-hant': 'zh_TW',
+    'ja': 'ja', 'ja-jp': 'ja',
+    'ko': 'ko', 'ko-kr': 'ko',
+    'ru': 'ru', 'ru-ru': 'ru',
+    'de': 'de', 'de-de': 'de',
+    'fr': 'fr', 'fr-fr': 'fr',
+    'es': 'es', 'es-es': 'es',
+  };
+  return map[raw] || map[raw.split('-')[0]] || 'en';
+}
+
+/** 获取 Steam 语言代码对应的原生名称（用于显示） */
+function getLangNative(code) {
+  const found = LANGUAGES.find(l => l.code === code);
+  return found ? found.native : code;
+}
+
 // ===== 状态管理 =====
 const state = {
   view: 'featured',       // 'featured' | 'search'
   cc: 'cn',
+  lang: detectDefaultLang(),
   featured: {
     data: null,           // 原始 API 数据
     tab: 'top_sellers',   // 'top_sellers' | 'specials'
@@ -201,8 +237,8 @@ function renderInlineError(container, message) {
 // ===== API 调用 =====
 
 /** Steam Store 搜索 */
-async function searchSteamGames(query) {
-  const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=us&l=en`;
+async function searchSteamGames(query, lang = 'en') {
+  const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=us&l=${lang}`;
   const res = await proxyFetch(url);
   if (!res.ok) throw new Error(`Steam 搜索失败 (${res.status})`);
   const data = await res.json();
@@ -253,8 +289,8 @@ async function fetchExchangeRates() {
  * 从 Steam Featured Categories API 获取热门/打折游戏
  * API 会根据 cc 参数返回对应币种的价格
  */
-async function fetchFeatured(cc) {
-  const url = `https://store.steampowered.com/api/featuredcategories?cc=${cc}&l=en`;
+async function fetchFeatured(cc, lang = 'en') {
+  const url = `https://store.steampowered.com/api/featuredcategories?cc=${cc}&l=${lang}`;
   const res = await proxyFetch(url);
   if (!res.ok) throw new Error(`Steam 推荐接口失败 (${res.status})`);
   const data = await res.json();
@@ -295,7 +331,7 @@ async function loadFeatured(cc) {
   try {
     // 并行获取：推荐数据 + 汇率
     const [featuredData] = await Promise.all([
-      fetchFeatured(cc),
+      fetchFeatured(cc, state.lang),
       fetchExchangeRates(),
     ]);
 
@@ -383,7 +419,7 @@ async function doSearch() {
 
   try {
     const [items] = await Promise.all([
-      searchSteamGames(query),
+      searchSteamGames(query, state.lang),
       fetchExchangeRates(),
     ]);
 
@@ -393,7 +429,7 @@ async function doSearch() {
         resultsEl.innerHTML = `
           <div class="no-results">
             <div class="icon">🔍</div>
-            <div class="text">没有找到 "${escapeHtml(query)}" 相关游戏<br><span style="color:#444;font-size:0.85em;">请尝试使用英文名称搜索</span></div>
+            <div class="text">没有找到 "${escapeHtml(query)}" 相关游戏<br><span style="color:#444;font-size:0.85em;">当前搜索语言：${getLangNative(state.lang)}，可尝试切换语言重新搜索</span></div>
           </div>`;
         return;
       }
@@ -717,7 +753,7 @@ function setupCurrencyTags() {
     state.cc = cc;
 
     if (state.view === 'featured') {
-      // 重新拉取推荐数据（含新币种价格）
+      // 重新拉取推荐数据（含新币种价格和新语言标题）
       loadFeatured(cc);
     } else {
       // 搜索模式：重新加载所有卡片的价格
@@ -726,6 +762,41 @@ function setupCurrencyTags() {
         const appId = card.dataset.appid;
         loadPriceForCard(appId, card, cc);
       }
+    }
+  });
+}
+
+/** 切换搜索语言 */
+function setupLanguageSelector() {
+  const langContainer = document.getElementById('langTags');
+  if (!langContainer) return;
+
+  // 渲染语言标签按钮
+  langContainer.innerHTML = LANGUAGES.map(l => `
+    <button class="lang-tag ${l.code === state.lang ? 'active' : ''}" data-lang="${l.code}">
+      ${l.flag} ${l.native}
+    </button>
+  `).join('');
+
+  langContainer.addEventListener('click', (e) => {
+    const tag = e.target.closest('.lang-tag');
+    if (!tag) return;
+
+    const lang = tag.dataset.lang;
+    if (lang === state.lang) return;
+
+    // 更新激活状态
+    langContainer.querySelectorAll('.lang-tag').forEach(t => t.classList.remove('active'));
+    tag.classList.add('active');
+    state.lang = lang;
+
+    // 根据当前视图刷新
+    if (state.view === 'featured') {
+      loadFeatured(state.cc);
+    } else if (state.view === 'search' && state.search.query) {
+      // 用当前关键词重新搜索
+      searchInput.value = state.search.query;
+      doSearch();
     }
   });
 }
@@ -742,6 +813,7 @@ function setupSearch() {
 // ===== 初始化 =====
 async function init() {
   setupCurrencyTags();
+  setupLanguageSelector();
   setupSearch();
   setupFeaturedTabs();
   await loadFeatured();
