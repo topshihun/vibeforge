@@ -687,6 +687,12 @@ function setupFeaturedTabs() {
     const category = tab.dataset.category;
     if (state.view === 'featured' && category === state.featured.tab) return;
 
+    // 保存当前视图的滚动位置（此时 state 仍是旧值）
+    const prevKey = state.view === 'featured'
+      ? `featured:${state.featured.tab}`
+      : (state.activeTabId ? `tab:${state.activeTabId}` : null);
+    if (prevKey) state.scrollPositions[prevKey] = resultsEl.scrollTop;
+
     // 切换到推荐标签
     searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
@@ -720,6 +726,12 @@ function setupFeaturedTabs() {
 
 /** 激活指定的搜索结果标签并渲染其内容 */
 function activateSearchTab(tabId) {
+  // 保存当前视图的滚动位置（此时 state 仍是旧值）
+  const prevKey = state.view === 'featured'
+    ? `featured:${state.featured.tab}`
+    : (state.activeTabId ? `tab:${state.activeTabId}` : null);
+  if (prevKey) state.scrollPositions[prevKey] = resultsEl.scrollTop;
+
   featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
   searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
 
@@ -792,6 +804,12 @@ async function doSearch(query, force) {
   }
 
   hideError();
+
+  // 保存当前滚动位置（即将切换视图）
+  const prevKey = state.view === 'featured'
+    ? `featured:${state.featured.tab}`
+    : (state.activeTabId ? `tab:${state.activeTabId}` : null);
+  if (prevKey) state.scrollPositions[prevKey] = resultsEl.scrollTop;
 
   // 如果已有同查询标签且非强制刷新，直接切过去
   if (!force) {
@@ -897,13 +915,9 @@ async function doSearch(query, force) {
 
 /** 渲染搜索结果列表（通用，featured 和 search 共用） */
 function renderResults(items) {
-  // 保存当前视图的滚动位置
-  const saveKey = state.view === 'featured'
+  const restoreKey = state.view === 'featured'
     ? `featured:${state.featured.tab}`
     : (state.activeTabId ? `tab:${state.activeTabId}` : null);
-  if (saveKey) {
-    state.scrollPositions[saveKey] = resultsEl.scrollTop;
-  }
 
   destroyPagination();
   resultsEl.innerHTML = '';
@@ -921,9 +935,9 @@ function renderResults(items) {
   initPagination(items);
 
   // 恢复该视图的滚动位置（等 DOM 布局完成）
-  if (saveKey && state.scrollPositions[saveKey]) {
+  if (restoreKey && state.scrollPositions[restoreKey]) {
     requestAnimationFrame(() => {
-      resultsEl.scrollTop = state.scrollPositions[saveKey] || 0;
+      resultsEl.scrollTop = state.scrollPositions[restoreKey] || 0;
     });
   }
 }
