@@ -135,7 +135,6 @@ const state = {
 /** 内存缓存：getHistoricalLow 结果，1 小时后过期 */
 const priceLowCache = new Map();
 const CACHE_TTL = 3600_000; // 1 小时
-const PRICE_HISTORY_KEY = 'steam_price_snapshots'; // localStorage key
 
 // ===== DOM 引用 =====
 const $ = id => document.getElementById(id);
@@ -193,6 +192,19 @@ async function proxyFetch(url, options = {}) {
   }
   // 全部失败，抛最后一条错误
   throw results[results.length - 1].reason;
+}
+
+/** proxyFetch 的自动重试版：失败后等待 1.5s 重试，最多 2 次 */
+async function proxyFetchWithRetry(url, options = {}, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await proxyFetch(url, options);
+    } catch (err) {
+      if (attempt >= maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  throw new Error('proxyFetchWithRetry exhausted');
 }
 
 /** 图片加载重试（指数退避，网络不稳定时自动重试最多 maxRetries 次） */
@@ -353,41 +365,50 @@ async function getHistoricalLow(steamAppId) {
     priceLowCache.delete(steamAppId);
   }
 
-  // 第一步：查 game 信息获取 cheapestDealID
-  const gameUrl = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
-  const gameRes = await proxyFetch(gameUrl);
-  if (!gameRes.ok) return null;
-  const gameData = await gameRes.json();
-  if (!Array.isArray(gameData) || gameData.length === 0) return null;
-  const entry = gameData[0];
-  const dealId = entry.cheapestDealID;
-  const retailUsd = parseFloat(entry.retailPrice) || null;
-  const currentUsd = parseFloat(entry.cheapest);
-  if (!dealId) {
-    const result = currentUsd ? { lowestUsd: currentUsd, lowestDate: null, retailUsd, currentUsd } : null;
-    if (result) { priceLowCache.set(steamAppId, { ts: Date.now(), data: result }); }
-    return result;
-  }
+  // 最多重试整个查询 2 次，应对 CORS 代理偶尔全部失败的情况
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    try {
+      // 第一步：查 game 信息获取 cheapestDealID
+      const gameUrl = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
+      const gameRes = await proxyFetchWithRetry(gameUrl, {}, 1);
+      if (!gameRes.ok) throw new Error(`Game API HTTP ${gameRes.status}`);
+      const gameData = await gameRes.json();
+      if (!Array.isArray(gameData) || gameData.length === 0) throw new Error('Game data empty');
+      const entry = gameData[0];
+      const dealId = entry.cheapestDealID;
+      const retailUsd = parseFloat(entry.retailPrice) || null;
+      const currentUsd = parseFloat(entry.cheapest);
+      if (!dealId) {
+        const result = currentUsd ? { lowestUsd: currentUsd, lowestDate: null, retailUsd, currentUsd } : null;
+        if (result) { priceLowCache.set(steamAppId, { ts: Date.now(), data: result }); }
+        return result;
+      }
 
-  // 第二步：查 deal 详情获取历史最低价
-  const dealUrl = `https://www.cheapshark.com/api/1.0/deals?id=${dealId}`;
-  const dealRes = await proxyFetch(dealUrl);
-  if (dealRes.ok) {
-    const dealData = await dealRes.json();
-    const historicPrice = parseFloat(dealData?.cheapestPrice?.price);
-    const lowestDate = dealData?.cheapestPrice?.date || null;
-    if (!isNaN(historicPrice)) {
-      const result = { lowestUsd: historicPrice, lowestDate, retailUsd, currentUsd };
-      priceLowCache.set(steamAppId, { ts: Date.now(), data: result });
-      return result;
+      // 第二步：查 deal 详情获取历史最低价
+      const dealUrl = `https://www.cheapshark.com/api/1.0/deals?id=${dealId}`;
+      const dealRes = await proxyFetchWithRetry(dealUrl, {}, 1);
+      if (dealRes.ok) {
+        const dealData = await dealRes.json();
+        const historicPrice = parseFloat(dealData?.cheapestPrice?.price);
+        const lowestDate = dealData?.cheapestPrice?.date || null;
+        if (!isNaN(historicPrice)) {
+          const result = { lowestUsd: historicPrice, lowestDate, retailUsd, currentUsd };
+          priceLowCache.set(steamAppId, { ts: Date.now(), data: result });
+          return result;
+        }
+      }
+
+      // 降级：只用 games 端点数据
+      if (!isNaN(currentUsd)) {
+        const result = { lowestUsd: currentUsd, lowestDate: null, retailUsd, currentUsd };
+        priceLowCache.set(steamAppId, { ts: Date.now(), data: result });
+        return result;
+      }
+      return null;
+    } catch (err) {
+      if (attempt >= 2) return null;
+      await new Promise(r => setTimeout(r, 2000)); // 等待 2s 后重试整个流程
     }
-  }
-
-  // 降级：只用 games 端点数据
-  if (!isNaN(currentUsd)) {
-    const result = { lowestUsd: currentUsd, lowestDate: null, retailUsd, currentUsd };
-    priceLowCache.set(steamAppId, { ts: Date.now(), data: result });
-    return result;
   }
   return null;
 }
@@ -986,7 +1007,7 @@ async function loadPriceForCard(appId, card, cc) {
   }
 }
 
-/** 史低价格查询 + 走势图 */
+/** 史低价格查询 */
 async function loadHistoryLow(appId, card) {
   const historyEl = card.querySelector(`#history-${appId}`);
   if (!historyEl) return;
@@ -1024,20 +1045,6 @@ async function loadHistoryLow(appId, card) {
         </span>`;
     }
     historyEl.innerHTML = html;
-
-    // 追加走势图
-    const priceRow = card.querySelector(`#price-row-${appId}`);
-    if (priceRow) {
-      const existingChart = priceRow.querySelector('.price-chart-row');
-      if (existingChart) existingChart.remove();
-
-      const chartRow = document.createElement('div');
-      chartRow.className = 'price-chart-row';
-      chartRow.id = `chart-${appId}`;
-      priceRow.after(chartRow);
-
-      renderPriceChart(appId, chartRow, data, currencyCode, symbol);
-    }
   } catch {
     const el = card.querySelector(`#history-${appId}`);
     if (el) el.innerHTML = `<span class="price-na">史低查询失败</span>`;
@@ -1146,8 +1153,6 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ===== 价格走势图 =====
-
 /** 格式化 Unix 时间戳 → YYYY-MM-DD */
 function formatDate(ts) {
   const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
@@ -1155,146 +1160,6 @@ function formatDate(ts) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-/** 保存价格快照到 localStorage */
-function savePriceSnapshot(appId, currentPrice, retailPrice) {
-  if (!currentPrice) return;
-  try {
-    const raw = localStorage.getItem(PRICE_HISTORY_KEY);
-    const all = raw ? JSON.parse(raw) : [];
-    all.push({
-      appId: String(appId),
-      ts: Date.now(),
-      price: currentPrice,
-      retail: retailPrice || null,
-    });
-    // 只保留每条最近的 30 条
-    const filtered = [];
-    const map = {};
-    for (let i = all.length - 1; i >= 0; i--) {
-      const key = all[i].appId;
-      if (!map[key]) { map[key] = 0; }
-      if (map[key] < 30) {
-        filtered.unshift(all[i]);
-        map[key]++;
-      }
-    }
-    localStorage.setItem(PRICE_HISTORY_KEY, JSON.stringify(filtered));
-  } catch { /* localStorage 满或不可用，静默失败 */ }
-}
-
-/** 获取某游戏的价格历史（从 localStorage） */
-function getPriceHistory(appId) {
-  try {
-    const raw = localStorage.getItem(PRICE_HISTORY_KEY);
-    if (!raw) return [];
-    const all = JSON.parse(raw);
-    return all
-      .filter(p => String(p.appId) === String(appId))
-      .sort((a, b) => a.ts - b.ts);
-  } catch { return []; }
-}
-
-/** 渲染价格对比条 + SVG 走势图 */
-function renderPriceChart(appId, container, chartData, currencyCode, symbol) {
-  const { retailUsd, currentUsd, lowestUsd, lowestDate } = chartData;
-  const maxPrice = Math.max(retailUsd || currentUsd, currentUsd, lowestUsd);
-
-  // 本地累积的历史数据
-  const snapshots = getPriceHistory(appId);
-
-  // 如果有当前价，保存快照
-  if (currentUsd != null) {
-    savePriceSnapshot(appId, currentUsd, retailUsd);
-  }
-
-  // — 价格对比条 —
-  const bars = [
-    { label: '原价', value: retailUsd, cls: 'original' },
-    { label: '当前', value: currentUsd, cls: 'current' },
-    { label: '史低', value: lowestUsd, cls: 'low' },
-  ].filter(b => b.value != null && b.value > 0);
-
-  let barsHtml = '<div class="price-bars">';
-  for (const b of bars) {
-    const pct = maxPrice > 0 ? (b.value / maxPrice * 100) : 0;
-    const barValue = formatUsdToLocal(b.value, currencyCode);
-    const display = barValue !== null ? `${symbol}${barValue}` : `$${b.value.toFixed(2)}`;
-    const saved = b.label === '当前' && retailUsd ? ` <span class="saved">-${Math.round((1 - b.value / retailUsd) * 100)}%</span>` : '';
-    barsHtml += `
-      <div class="price-bar-item">
-        <span class="price-bar-label">${b.label}</span>
-        <span class="price-bar-track"><span class="price-bar-fill ${b.cls}" style="width:${Math.max(pct, 3)}%"></span></span>
-        <span class="price-bar-value">${display}${saved}</span>
-      </div>`;
-  }
-  barsHtml += '</div>';
-
-  // — SVG 走势图（有累积数据且 >= 2 点） —
-  let sparkHtml = '';
-  if (snapshots.length >= 2) {
-    sparkHtml = renderSvgSparkline(appId, snapshots, maxPrice);
-  } else if (snapshots.length === 1 && lowestDate) {
-    // 只有 1 个快照 + 史低日期 → 显示简化版：两个点
-    const fakePoints = [
-      { ts: lowestDate * 1000, price: lowestUsd },
-      { ts: snapshots[0].ts, price: snapshots[0].price },
-    ];
-    sparkHtml = renderSvgSparkline(appId, fakePoints, maxPrice, true);
-  }
-  // 如果 snapshots.length === 0: 不显示走势图，只显示对比条
-
-  // — 折叠开关（有走势图时） —
-  let toggleHtml = '';
-  if (sparkHtml) {
-    toggleHtml = '<div class="price-chart-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\';this.textContent=this.nextElementSibling.style.display===\'none\'?\'📊 显示走势图\':\'📊 隐藏走势图\'">📊 显示走势图</div>';
-  }
-
-  container.innerHTML = barsHtml + toggleHtml + (sparkHtml ? `<div class="price-sparkline" style="display:none">${sparkHtml}</div>` : '');
-}
-
-/** 渲染 SVG 走势图 */
-function renderSvgSparkline(appId, points, maxPrice, isSimple) {
-  if (points.length < 2) return '';
-
-  const minP = Math.min(...points.map(p => p.price)) * 0.95;
-  const maxP = Math.max(maxPrice || Math.max(...points.map(p => p.price)) * 1.05, minP + 0.01);
-  const range = maxP - minP;
-
-  const W = 280, H = 45;
-  const padL = 0, padR = 0, padT = 2, padB = 2;
-  const iw = W - padL - padR;
-  const ih = H - padT - padB;
-
-  const mapX = (i, n) => padL + (i / (n - 1)) * iw;
-  const mapY = (v) => padT + ih - ((v - minP) / range) * ih;
-
-  const n = points.length;
-  const pts = points.map((p, i) => `${mapX(i, n).toFixed(1)},${mapY(p.price).toFixed(1)}`);
-  const polyline = pts.join(' ');
-  const area = `0,${H} ${pts.join(' ')} ${mapX(n - 1, n).toFixed(1)},${H}`;
-
-  // 价格标签：第一个和最后一个
-  const firstLabel = `$${points[0].price.toFixed(2)}`;
-  const lastLabel = `$${points[points.length - 1].price.toFixed(2)}`;
-
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="grad-${appId}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(130,87,229,0.3)"/>
-        <stop offset="100%" stop-color="rgba(130,87,229,0.02)"/>
-      </linearGradient>
-    </defs>
-    <polygon points="${area}" fill="url(#grad-${appId})"/>
-    <polyline points="${polyline}" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <!-- 起点 -->
-    <circle cx="${mapX(0, n).toFixed(1)}" cy="${mapY(points[0].price).toFixed(1)}" r="2" fill="#a78bfa"/>
-    <!-- 终点 -->
-    <circle cx="${mapX(n - 1, n).toFixed(1)}" cy="${mapY(points[points.length - 1].price).toFixed(1)}" r="2.5" fill="#fbbf24"/>
-    <!-- 史低点（如果存在且有史低日期） -->
-    ${!isSimple ? `<circle cx="${mapX(n - 1, n).toFixed(1)}" cy="${mapY(Math.min(...points.map(p => p.price))).toFixed(1)}" r="2" fill="#fbbf24" opacity="0.7"/>` : ''}
-  </svg>`;
 }
 
 // ===== 事件绑定 =====
