@@ -136,6 +136,9 @@ const state = {
 const priceLowCache = new Map();
 const CACHE_TTL = 3600_000; // 1 小时
 
+/** 多语言游戏名字缓存：Map<appId, Map<lang, name>> */
+const nameCache = new Map();
+
 // ===== DOM 引用 =====
 const $ = id => document.getElementById(id);
 const searchInput = $('searchInput');
@@ -340,6 +343,48 @@ async function searchSteamStoreFull(query, lang = 'en') {
       _fromFullSearch: true, // 标记来源，用于后续可能的补充
     };
   }).filter(Boolean);
+}
+
+/** 获取指定语言的游戏本地化名称（缓存 + AppDetails API，仅 basic 过滤，轻量）
+ *  返回本地化名称，查询失败时返回 null */
+async function fetchGameName(appId, lang) {
+  // 检查缓存
+  if (nameCache.has(appId)) {
+    const langMap = nameCache.get(appId);
+    if (langMap.has(lang)) return langMap.get(lang);
+  }
+  try {
+    const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=${lang}&filters=basic`;
+    const res = await proxyFetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const app = data[String(appId)];
+    const name = (app && app.success && app.data?.name) || null;
+    // 写入缓存
+    if (!nameCache.has(appId)) nameCache.set(appId, new Map());
+    nameCache.get(appId).set(lang, name);
+    return name;
+  } catch {
+    return null;
+  }
+}
+
+/** 更新所有可见游戏卡片的名称（切换语言后调用） */
+async function updateCardLanguage(lang) {
+  const cards = document.querySelectorAll('.game-card');
+  const pending = [];
+  cards.forEach(card => {
+    const appId = parseInt(card.dataset.appid, 10);
+    if (!appId) return;
+    pending.push((async () => {
+      const name = await fetchGameName(appId, lang);
+      if (name) {
+        const nameEl = card.querySelector('.game-name');
+        if (nameEl) nameEl.textContent = name;
+      }
+    })());
+  });
+  await Promise.allSettled(pending);
 }
 
 /** Steam AppDetails — 获取指定货币的价格 */
@@ -680,6 +725,8 @@ function activateSearchTab(tabId) {
       </div>`;
   } else {
     renderResults(tabState.results);
+    // 切换语言后激活旧标签，需要更新游戏名称
+    updateCardLanguage(state.lang).catch(() => {});
   }
 }
 
@@ -713,45 +760,67 @@ function closeSearchTab(tabId) {
   }
 }
 
-/** 搜索并展示结果（启动时即刻创建标签、进入 loading） */
-async function doSearch() {
-  const query = searchInput.value.trim();
+/** 搜索并展示结果。支持可选参数：query（搜索词，默认取输入框）、force（强制重新搜索当前标签） */
+async function doSearch(query, force) {
   if (!query) {
-    showError('请输入游戏名称');
-    return;
+    query = searchInput.value.trim();
+    if (!query) {
+      showError('请输入游戏名称');
+      return;
+    }
   }
 
   hideError();
 
-  // 如果已有同查询标签，直接切过去
-  const existing = state.searchTabs.find(t => t.query === query);
-  if (existing) {
-    activateSearchTab(existing.id);
-    return;
+  // 如果已有同查询标签且非强制刷新，直接切过去
+  if (!force) {
+    const existing = state.searchTabs.find(t => t.query === query);
+    if (existing) {
+      activateSearchTab(existing.id);
+      return;
+    }
   }
 
-  // 创建新标签状态
-  const id = state.tabIdCounter++;
-  const tabState = { id, query, results: [], loading: true, error: null };
-  state.searchTabs.push(tabState);
+  // force 刷新：重用已有标签（同查询），否则创建新标签
+  let id, tabState, tabEl;
+  const existingTab = force && state.searchTabs.find(t => t.query === query);
 
-  // 创建标签 DOM
-  const tabEl = document.createElement('button');
-  tabEl.className = 'search-tab active';
-  tabEl.dataset.tabId = id;
-  tabEl.innerHTML = `<span class="search-tab-label">🔍 ${escapeHtml(query)}</span><span class="close-tab" data-tab-id="${id}">✕</span>`;
-  searchTabsEl.appendChild(tabEl);
+  if (existingTab) {
+    id = existingTab.id;
+    tabState = existingTab;
+    tabState.results = [];
+    tabState.loading = true;
+    tabState.error = null;
+    tabEl = searchTabsEl.querySelector(`[data-tab-id="${id}"]`);
+    // 确保标签激活
+    featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+    searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+    if (tabEl) tabEl.classList.add('active');
+    state.view = 'search_tab';
+    state.activeTabId = id;
+    destroyPagination();
+    renderInlineLoading(resultsEl);
+  } else {
+    id = state.tabIdCounter++;
+    tabState = { id, query, results: [], loading: true, error: null };
+    state.searchTabs.push(tabState);
 
-  // 去激活其他所有标签
-  featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
-  searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
-  tabEl.classList.add('active');
+    tabEl = document.createElement('button');
+    tabEl.className = 'search-tab active';
+    tabEl.dataset.tabId = id;
+    tabEl.innerHTML = `<span class="search-tab-label">🔍 ${escapeHtml(query)}</span><span class="close-tab" data-tab-id="${id}">✕</span>`;
+    searchTabsEl.appendChild(tabEl);
 
-  state.view = 'search_tab';
-  state.activeTabId = id;
+    featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+    searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
 
-  destroyPagination();
-  renderInlineLoading(resultsEl);
+    state.view = 'search_tab';
+    state.activeTabId = id;
+
+    destroyPagination();
+    renderInlineLoading(resultsEl);
+  }
 
   try {
     const items = await searchSteamGames(query, state.lang);
@@ -1234,6 +1303,11 @@ function setupLangSelect() {
     state.lang = lang;
     renderOptions();
     container.classList.remove('open');
+    // 更新搜索框提示
+    const cur = LANGUAGES.find(l => l.code === lang);
+    searchInput.placeholder = `🔍 ${cur ? cur.native + ' · ' : ''}搜游戏名称...`;
+    searchInput.lang = lang.replace('_', '-');
+
     if (state.view === 'featured') {
       loadFeatured(state.cc);
     } else if (state.view === 'search_tab' && state.activeTabId) {
@@ -1243,6 +1317,9 @@ function setupLangSelect() {
         doSearch(activeTab.query, true);
       }
     }
+
+    // 更新所有可见卡片的名称（包括缓存标签页和搜索历史标签）
+    updateCardLanguage(lang).catch(() => {});
   });
 }
 
@@ -1261,6 +1338,10 @@ async function init() {
   setupLangSelect();
   setupSearch();
   setupFeaturedTabs();
+  // 设置初始搜索框提示
+  const cur = LANGUAGES.find(l => l.code === state.lang);
+  searchInput.placeholder = `🔍 ${cur ? cur.native + ' · ' : ''}搜游戏名称...`;
+  searchInput.lang = state.lang.replace('_', '-');
   await loadFeatured();
   searchInput.focus();
 }
