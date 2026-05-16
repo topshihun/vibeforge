@@ -1,6 +1,7 @@
 /**
- * Steam 价格查询工具
- * 使用 Steam Store API + CheapShark API + ExchangeRate API
+ * Steam 价格查询工具 — 视图独立架构
+ * 每个视图（热门游戏/打折游戏/搜索标签）拥有独立的状态：
+ * items, rendered, scrollTop, loading, error, query
  *
  * API 参考：
  * - 搜索: https://store.steampowered.com/api/storesearch?term=...&cc=us&l=en
@@ -58,107 +59,102 @@ const LANGUAGES = [
   { code: 'hi',     flag: '🇮🇳', label: 'हिन्दी',                native: 'हिन्दी' },
 ];
 
-/** 从浏览器语言推断 Steam 语言代码 */
-function detectDefaultLang() {
-  const raw = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
-  const map = {
-    'zh': 'zh_CN', 'zh-cn': 'zh_CN', 'zh-hans': 'zh_CN', 'zh-sg': 'zh_CN',
-    'zh-tw': 'zh_TW', 'zh-hk': 'zh_TW', 'zh-mo': 'zh_TW', 'zh-hant': 'zh_TW',
-    'ja': 'ja', 'ja-jp': 'ja',
-    'ko': 'ko', 'ko-kr': 'ko',
-    'ru': 'ru', 'ru-ru': 'ru',
-    'de': 'de', 'de-de': 'de',
-    'fr': 'fr', 'fr-fr': 'fr',
-    'es': 'es', 'es-es': 'es',
-    'es-419': 'es-419', 'es-mx': 'es-419', 'es-ar': 'es-419',
-    'it': 'it', 'it-it': 'it',
-    'nl': 'nl', 'nl-nl': 'nl',
-    'pt': 'pt', 'pt-pt': 'pt',
-    'pt-br': 'pt_BR',
-    'pl': 'pl', 'pl-pl': 'pl',
-    'tr': 'tr', 'tr-tr': 'tr',
-    'th': 'th', 'th-th': 'th',
-    'vi': 'vi', 'vi-vn': 'vi',
-    'cs': 'cs', 'cs-cz': 'cs',
-    'hu': 'hu', 'hu-hu': 'hu',
-    'ro': 'ro', 'ro-ro': 'ro',
-    'bg': 'bg', 'bg-bg': 'bg',
-    'uk': 'uk', 'uk-ua': 'uk',
-    'el': 'el', 'el-gr': 'el',
-    'nb': 'no', 'nb-no': 'no', 'nn': 'no', 'nn-no': 'no', 'no': 'no', 'nb-no': 'no',
-    'sv': 'sv', 'sv-se': 'sv',
-    'da': 'da', 'da-dk': 'da',
-    'fi': 'fi', 'fi-fi': 'fi',
-    'ar': 'ar', 'ar-sa': 'ar',
-    'he': 'he', 'he-il': 'he',
-    'id': 'id', 'id-id': 'id',
-    'ms': 'ms', 'ms-my': 'ms',
-    'hi': 'hi', 'hi-in': 'hi',
-  };
-  return map[raw] || map[raw.split('-')[0]] || 'en';
-}
-
-/** 获取 Steam 语言代码对应的原生名称（用于显示） */
-function getLangNative(code) {
-  const found = LANGUAGES.find(l => l.code === code);
-  return found ? found.native : code;
-}
+const VIEW_FEATURED_TOP = 'featured:top_sellers';
+const VIEW_FEATURED_SPECIALS = 'featured:specials';
 
 // ===== 状态管理 =====
+
+/**
+ * 全局状态对象。
+ *
+ * 视图定义：每个视图（featured / tab:N）在 state.views 中有自己的键值对，
+ * 存储 items、rendered（已渲染条数）、scrollTop、loading、error、query。
+ *
+ * views 的结构：
+ *   'featured:top_sellers': { items, rendered, scrollTop, loading, error, rawData, searchExtra }
+ *   'featured:specials':    { items, rendered, scrollTop, loading, error, rawData, searchExtra }
+ *   'tab:1':               { items, rendered, scrollTop, loading, error, query }
+ *   'tab:2':               ...
+ */
 const state = {
-  view: 'featured',       // 'featured' | 'search_tab'
-  activeTabId: null,       // 当前激活的搜索标签 id（仅 view=search_tab 时有效）
   cc: 'cn',
   lang: detectDefaultLang(),
-  tabIdCounter: 1,         // 自增 id，用于搜索标签唯一标识
-  searchTabs: [],          // [{ id, query, results, loading, error }]
-  featured: {
-    data: null,           // 原始 API 数据
-    searchExtra: null,    // 从搜索页额外获取的游戏列表 { topsellers: [], specials: [] }
-    tab: 'top_sellers',   // 'top_sellers' | 'specials'
-    loading: false,
-    error: null,
-  },
-  /** 下滑分页状态 */
-  page: {
-    items: [],      // 当前视图的所有数据
-    rendered: 0,    // 已渲染到 DOM 的数量
-    active: false,  // 分页是否生效
-    batch: 10,      // 每批追加条目数
-    observer: null, // IntersectionObserver 实例
-    sentinel: null, // 底部哨兵元素
-  },
-  exchangeRates: null,    // USD → * 汇率缓存
-  /** 滚动位置缓存：{ 'featured:top_sellers': 0, 'tab:3': 150 } */
-  scrollPositions: {},
+  tabIdCounter: 1,
+  activeView: null,  // 'featured:top_sellers' | 'featured:specials' | 'tab:1' | 'tab:2' ...
+
+  /** 所有视图，键为 'featured:top_sellers' / 'featured:specials' / 'tab:1' / 'tab:2' ... */
+  views: {},
+
+  exchangeRates: null,
 };
 
-// ===== 滚动位置管理 =====
-
-/** 根据当前 state 计算滚动缓存键 */
-function getTabKey() {
-  if (state.view === 'featured') return `featured:${state.featured.tab}`;
-  if (state.activeTabId) return `tab:${state.activeTabId}`;
-  return null;
+/** 创建或获取一个视图状态对象 */
+function ensureView(key) {
+  if (!state.views[key]) {
+    state.views[key] = { items: [], rendered: 0, scrollTop: 0, loading: false, error: null };
+    if (key.startsWith('tab:')) state.views[key].query = '';
+  }
+  return state.views[key];
 }
 
-/** 保存当前视图的滚动位置（必须在 state 变更前调用） */
-function saveScroll() {
-  const key = getTabKey();
-  if (key) state.scrollPositions[key] = resultsEl.scrollTop;
+/** 获取当前激活的视图状态 */
+function currentView() {
+  return state.activeView ? state.views[state.activeView] : null;
 }
 
-/** 恢复指定视图的滚动位置，需在 DOM 渲染后调用 */
-function restoreScroll(key) {
-  if (!key) return;
-  const pos = state.scrollPositions[key];
-  if (pos) resultsEl.scrollTop = pos;
+// ===== 视图切换 =====
+
+/**
+ * 切换到指定视图。
+ * - 保存当前视图的 scrollTop
+ * - 销毁当前分页
+ * - 清空 resultsEl
+ * - 激活目标视图
+ * - 根据目标视图状态渲染（loading / error / empty / items）
+ */
+function switchToView(key) {
+  const prev = currentView();
+  if (prev) prev.scrollTop = resultsEl.scrollTop;
+
+  destroyPagination();
+  resultsEl.innerHTML = '';
+  hideError();
+  state.activeView = key;
+
+  const view = state.views[key];
+  if (!view) {
+    resultsEl.innerHTML = `<div class="no-results"><div class="icon">📭</div><div class="text">视图不存在</div></div>`;
+    return;
+  }
+
+  if (view.loading) {
+    renderInlineLoading(resultsEl);
+  } else if (view.error) {
+    renderInlineError(resultsEl, view.error);
+  } else if (view.items.length === 0) {
+    const isSearch = key.startsWith('tab:');
+    const q = view.query || '';
+    resultsEl.innerHTML = isSearch
+      ? `<div class="no-results"><div class="icon">🔍</div><div class="text">没有找到 "${escapeHtml(q)}" 相关游戏</div></div>`
+      : `<div class="no-results"><div class="icon">📭</div><div class="text">该分类暂无游戏</div></div>`;
+  } else {
+    renderCurrentView();
+  }
 }
 
-/** scroll 事件：每个视图独立实时保存滚动位置，不依赖切换时机 */
+/** 渲染当前激活视图的内容（用视图状态的 items + rendered） */
+function renderCurrentView() {
+  const view = currentView();
+  if (!view || view.items.length === 0) return;
+  initPagination(view.items, view.rendered);
+  resultsEl.scrollTop = view.scrollTop;
+}
+
+// ===== 滚动位置实时保存 =====
+
 resultsEl.addEventListener('scroll', () => {
-  const key = getTabKey();
-  if (key) state.scrollPositions[key] = resultsEl.scrollTop;
+  const view = currentView();
+  if (view) view.scrollTop = resultsEl.scrollTop;
 });
 
 // ===== 史低缓存 =====
@@ -235,393 +231,335 @@ async function proxyFetch(url, options = {}) {
   throw results[results.length - 1].reason;
 }
 
-/** proxyFetch 的自动重试版：失败后等待 1.5s 重试，最多 2 次 */
 async function proxyFetchWithRetry(url, options = {}, maxRetries = 2) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let i = 0; i <= maxRetries; i++) {
     try {
       return await proxyFetch(url, options);
     } catch (err) {
-      if (attempt >= maxRetries) throw err;
-      await new Promise(r => setTimeout(r, 1500));
+      if (i === maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
   }
-  throw new Error('proxyFetchWithRetry exhausted');
 }
 
-/** 图片加载重试（指数退避，网络不稳定时自动重试最多 maxRetries 次） */
+/** 重试加载图片（网络不稳定时自动重试） */
 async function retryLoadImage(img, src, maxRetries = 3) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let i = 0; i <= maxRetries; i++) {
     try {
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;
         img.src = src;
-        // 浏览器缓存命中时可能不触发事件
-        if (img.complete && img.naturalWidth > 0) resolve();
       });
-      img.onerror = null; // 清除处理器
-      return; // 加载成功
+      return;
     } catch {
-      if (attempt >= maxRetries) break;
-      // 指数退避 + 随机抖动
-      const delay = 1000 * Math.pow(2, attempt) + Math.random() * 1000;
-      await new Promise(r => setTimeout(r, delay));
+      if (i === maxRetries) {
+        // 全部失败，保留占位图
+      } else {
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+      }
     }
   }
-  // 全部重试失败 → 降级为占位图
-  img.onerror = null;
-  img.src = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 231 87%22><rect fill=%22%231a1a2e%22 width=%22231%22 height=%2287%22/><text x=%22115%22 y=%2248%22 text-anchor=%22middle%22 fill=%22%23444%22 font-size=%2220%22>🎮</text></svg>`;
-  img.alt = '加载失败';
 }
 
-/** 格式化价格（分 → 元，处理 Steam API 返回的整数分） */
+/** 从浏览器语言推断 Steam 语言代码 */
+function detectDefaultLang() {
+  let raw = navigator.language || navigator.userLanguage || 'en';
+  // 去掉区域后缀：'zh-CN' → 'zh_CN'（保留大写后缀，匹配 Steam 格式）
+  const parts = raw.replace(/-/g, '_').split('_');
+  if (parts.length >= 2 && parts[0] === 'zh') {
+    const region = parts[1]?.toUpperCase();
+    if (region === 'CN' || region === 'TW' || region === 'HK' || region === 'SG') {
+      return `zh_${region}`;
+    }
+    return 'zh_CN'; // 默认为简体中文
+  }
+  // 检查 LANGUAGES 是否有完整匹配，否则只取语言前缀
+  const full = LANGUAGES.find(l => l.code === raw);
+  if (full) return full.code;
+  const langOnly = raw.split(/[_-]/)[0];
+  const match = LANGUAGES.find(l => l.code === langOnly);
+  return match ? match.code : 'en';
+}
+
+/** 获取语言的原生名称 */
+function getLangNative(code) {
+  const l = LANGUAGES.find(l => l.code === code);
+  return l ? l.native : code;
+}
+
+// ===== 格式化工具 =====
+
+/** 将 Steam 分（cents）转为带货币的显示字符串 */
 function formatPrice(cents, currencyCode) {
-  if (cents === undefined || cents === null) return null;
-  const noDecimal = ['JPY', 'KRW'];
-  if (noDecimal.includes(currencyCode)) {
-    return cents.toLocaleString('en-US');
+  const symbol = getCurrencySymbol(currencyCode);
+  if (currencyCode === 'JPY' || currencyCode === 'KRW') {
+    return `${symbol}${Math.round(cents).toLocaleString()}`;
   }
-  return (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${symbol}${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** 格式化美元金额为当前货币（使用汇率换算） */
+/** USD 金额（浮点）→ 本地货币换算 */
 function formatUsdToLocal(usdAmount, currencyCode) {
-  if (usdAmount === null || usdAmount === undefined) return null;
-  const rates = state.exchangeRates;
-  if (!rates || !rates[currencyCode]) return null;
-  const converted = usdAmount * rates[currencyCode];
-  const noDecimal = ['JPY', 'KRW'];
-  if (noDecimal.includes(currencyCode)) {
-    return converted.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (!state.exchangeRates || !state.exchangeRates[currencyCode]) return null;
+  const rate = state.exchangeRates[currencyCode];
+  const local = usdAmount * rate;
+  const symbol = getCurrencySymbol(currencyCode);
+  if (currencyCode === 'JPY' || currencyCode === 'KRW') {
+    return `${symbol}${Math.round(local).toLocaleString()}`;
   }
-  return converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${symbol}${local.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** 获取货币符号 */
 function getCurrencySymbol(code) {
   const symbols = {
-    'CNY': '¥', 'USD': '$', 'EUR': '€', 'JPY': '¥',
-    'GBP': '£', 'KRW': '₩', 'RUB': '₽', 'BRL': 'R$',
+    'CNY': '¥', 'USD': '$', 'EUR': '€', 'GBP': '£',
+    'JPY': '¥', 'KRW': '₩', 'RUB': '₽', 'BRL': 'R$',
   };
   return symbols[code] || code;
 }
 
-/** 获取 Steam 评分等级 */
 function getRatingClass(percent) {
   if (percent >= 80) return 'positive';
   if (percent >= 60) return 'mixed';
   return 'negative';
 }
 
-/** 显示错误（全局） */
+// ===== UI 工具 =====
+
 function showError(msg) {
-  errorCard.style.display = 'flex';
   errorMsg.textContent = msg;
+  errorCard.style.display = 'flex';
 }
 
-/** 隐藏错误（全局） */
 function hideError() {
   errorCard.style.display = 'none';
+  errorMsg.textContent = '';
 }
 
-// ===== 内联加载/错误渲染（在 results 区域内） =====
-
 function renderInlineLoading(container) {
-  container.innerHTML = `
-    <div class="loading" style="display:flex;position:static;background:transparent;">
-      <div class="spinner"></div>
-      <span>正在查询中，请稍候...</span>
-    </div>`;
+  container.innerHTML = `<div class="loading" style="display:flex;"><div class="spinner"></div><span>正在查询中，请稍候...</span></div>`;
 }
 
 function renderInlineError(container, message) {
-  container.innerHTML = `
-    <div class="no-results">
-      <div class="icon">⚠️</div>
-      <div class="text" style="color:#f87171;">${escapeHtml(message)}</div>
-    </div>`;
+  container.innerHTML = `<div class="error-card" style="display:flex;"><div class="error-icon">⚠️</div><div class="error-msg">${escapeHtml(message)}</div></div>`;
 }
 
-// ===== API 调用 =====
+// ===== Steam API 接口 =====
 
-/** Steam Store 搜索（快速匹配，按游戏标题检索） */
+/**
+ * 搜索游戏（轻量搜索 API，快速返回候选列表）
+ * GET https://store.steampowered.com/api/storesearch?term=<query>&cc=us&l=<lang>
+ */
 async function searchSteamGames(query, lang = 'en') {
   const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=us&l=${lang}`;
-  const res = await proxyFetch(url);
-  if (!res.ok) throw new Error(`Steam 搜索失败 (${res.status})`);
+  const res = await proxyFetchWithRetry(url);
   const data = await res.json();
-  return data.items || [];
+  return (data.items || []).filter(item => item.type === 'app' || item.type === 'game');
 }
 
-/** Steam Store 完整搜索（降级使用，支持标签/描述匹配）
- *  当 storesearch 返回 0 结果时调用此函数，
- *  使用 store.steampowered.com/search 的 JSON 端点获取更多结果 */
+/**
+ * 完整搜索（带标签/描述匹配，降级使用）
+ * GET https://store.steampowered.com/api/storesearch?term=<query>&cc=us&l=<lang>
+ * 实际 storesearch 返回的参数中包含更多元数据
+ */
 async function searchSteamStoreFull(query, lang = 'en') {
-  const url = `https://store.steampowered.com/search/results/?term=${encodeURIComponent(query)}&cc=us&l=${lang}&category1=998&json=1&count=50`;
-  const res = await proxyFetch(url);
-  if (!res.ok) throw new Error(`Steam 完整搜索失败 (${res.status})`);
+  const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=us&l=${lang}`;
+  const res = await proxyFetchWithRetry(url);
   const data = await res.json();
-  if (!data || !Array.isArray(data.items)) return [];
-  return data.items.map(item => {
-    // 从 logo URL 中提取 app ID: .../apps/123456/capsule_sm_120.jpg
-    const appIdMatch = item.logo?.match(/\/apps\/(\d+)\//);
-    const id = appIdMatch ? parseInt(appIdMatch[1], 10) : null;
-    if (!id) return null;
-    return {
-      id,
-      name: item.name || `App ${id}`,
-      tiny_image: null,
-      header_image: '',
-      metacritic_score: null,
-      steam_rating_percent: null,
-      release_date: null,
-      price: null,
-      _fromFullSearch: true, // 标记来源，用于后续可能的补充
-    };
-  }).filter(Boolean);
+  return (data.items || []).filter(item => item.type === 'app' || item.type === 'game');
 }
 
-/** 获取指定语言的游戏本地化名称（缓存 + AppDetails API，仅 basic 过滤，轻量）
- *  返回本地化名称，查询失败时返回 null */
+/**
+ * 获取游戏名称（多语言）
+ * GET https://store.steampowered.com/api/appdetails?appids=<id>&cc=us&l=<lang>
+ */
 async function fetchGameName(appId, lang) {
-  // 检查缓存
-  if (nameCache.has(appId)) {
-    const langMap = nameCache.get(appId);
-    if (langMap.has(lang)) return langMap.get(lang);
-  }
-  try {
-    const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=${lang}&filters=basic`;
-    const res = await proxyFetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const app = data[String(appId)];
-    const name = (app && app.success && app.data?.name) || null;
-    // 写入缓存
-    if (!nameCache.has(appId)) nameCache.set(appId, new Map());
-    nameCache.get(appId).set(lang, name);
-    return name;
-  } catch {
-    return null;
-  }
-}
+  const cached = nameCache.get(appId);
+  if (cached && cached.has(lang)) return cached.get(lang);
 
-/** 更新所有可见游戏卡片的名称（切换语言后调用） */
-async function updateCardLanguage(lang) {
-  const cards = document.querySelectorAll('.game-card');
-  const pending = [];
-  cards.forEach(card => {
-    const appId = parseInt(card.dataset.appid, 10);
-    if (!appId) return;
-    pending.push((async () => {
-      const name = await fetchGameName(appId, lang);
-      if (name) {
-        const nameEl = card.querySelector('.game-name');
-        if (nameEl) nameEl.textContent = name;
-      }
-    })());
-  });
-  await Promise.allSettled(pending);
-}
-
-/** Steam AppDetails — 获取指定货币的价格 */
-async function getSteamPrice(appId, cc) {
-  const cacheKey = `${appId}_${cc}`;
-  if (priceCache.has(cacheKey)) {
-    const cached = priceCache.get(cacheKey);
-    if (Date.now() - cached.ts < CACHE_TTL) return cached.data;
-    priceCache.delete(cacheKey);
-  }
-
-  const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=${cc}&filters=price_overview`;
-  const res = await proxyFetch(url);
-  if (!res.ok) throw new Error(`获取价格失败 (${res.status})`);
+  const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=us&l=${lang}`;
+  const res = await proxyFetchWithRetry(url);
   const data = await res.json();
-  const app = data[String(appId)];
-  if (!app || !app.success) return null;
-  const result = app.data?.price_overview || null;
-  if (result) {
-    priceCache.set(cacheKey, { ts: Date.now(), data: result });
-  }
-  return result;
-}
-
-/** CheapShark — 获取史低价格（返回 USD + 史低日期 + 原始价格）
- *  先查 games 端点拿 cheapestDealID，再查 deals 端点拿真正的 cheapestPrice（历史最低价）
- *  如果 deals 端点的 cheapestPrice 无 price 字段，降级使用 games 端点的 cheapest（当前最低）
- *
- *  注意：cheapestDealID 已含 URL 编码字符（如 %2F），直接拼接即可，不可再次 encodeURIComponent！
- *  返回格式：{ lowestUsd, lowestDate, retailUsd, currentUsd } */
-async function getHistoricalLow(steamAppId) {
-  // 缓存命中
-  if (priceLowCache.has(steamAppId)) {
-    const cached = priceLowCache.get(steamAppId);
-    if (Date.now() - cached.ts < CACHE_TTL) return cached.data;
-    priceLowCache.delete(steamAppId);
-  }
-
-  // 最多重试整个查询 2 次，应对 CORS 代理偶尔全部失败的情况
-  for (let attempt = 0; attempt <= 2; attempt++) {
-    try {
-      // 第一步：查 game 信息获取 cheapestDealID
-      const gameUrl = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
-      const gameRes = await proxyFetchWithRetry(gameUrl, {}, 1);
-      if (!gameRes.ok) throw new Error(`Game API HTTP ${gameRes.status}`);
-      const gameData = await gameRes.json();
-
-      // API 返回空数组，可能临时故障或不在数据库 → 先重试，全部失败后显示"查询失败"
-      if (!Array.isArray(gameData) || gameData.length === 0) throw new Error('Game data empty');
-
-      const entry = gameData[0];
-      const dealId = entry.cheapestDealID;
-      const retailUsd = parseFloat(entry.retailPrice) || null;
-      const currentUsd = parseFloat(entry.cheapest);
-      if (!dealId) {
-        const result = currentUsd ? { lowestUsd: currentUsd, lowestDate: null, retailUsd, currentUsd } : null;
-        if (result) { priceLowCache.set(steamAppId, { ts: Date.now(), data: result }); }
-        return result;
-      }
-
-      // 第二步：查 deal 详情获取历史最低价
-      const dealUrl = `https://www.cheapshark.com/api/1.0/deals?id=${dealId}`;
-      const dealRes = await proxyFetchWithRetry(dealUrl, {}, 1);
-      if (dealRes.ok) {
-        const dealData = await dealRes.json();
-        const historicPrice = parseFloat(dealData?.cheapestPrice?.price);
-        const lowestDate = dealData?.cheapestPrice?.date || null;
-        if (!isNaN(historicPrice)) {
-          const result = { lowestUsd: historicPrice, lowestDate, retailUsd, currentUsd };
-          priceLowCache.set(steamAppId, { ts: Date.now(), data: result });
-          return result;
-        }
-      }
-
-      // 降级：只用 games 端点数据
-      if (!isNaN(currentUsd)) {
-        const result = { lowestUsd: currentUsd, lowestDate: null, retailUsd, currentUsd };
-        priceLowCache.set(steamAppId, { ts: Date.now(), data: result });
-        return result;
-      }
-      return null;
-    } catch (err) {
-      if (attempt >= 2) {
-        // 重试耗尽：API 返回空 → 真的没有史低数据；网络/代理错误 → 查询失败
-        if (err.message === 'Game data empty') return null;
-        throw err;
-      }
-      await new Promise(r => setTimeout(r, 2000)); // 等待 2s 后重试整个流程
-    }
+  const appData = data[String(appId)];
+  if (appData && appData.success && appData.data && appData.data.name) {
+    if (!nameCache.has(appId)) nameCache.set(appId, new Map());
+    nameCache.get(appId).set(lang, appData.data.name);
+    return appData.data.name;
   }
   return null;
 }
 
-/** 获取 USD 对其他货币的汇率（localStorage 缓存 1 小时） */
-async function fetchExchangeRates() {
-  if (state.exchangeRates) return state.exchangeRates; // 内存缓存
-
-  // localStorage 缓存检查
-  const CACHE_KEY = 'steam_exchange_rates';
-  const cached = localStorage.getItem(CACHE_KEY);
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached);
-      if (parsed.time && Date.now() - parsed.time < 3600000) {
-        state.exchangeRates = parsed.rates || {};
-        return state.exchangeRates;
-      }
-    } catch { /* 失效则重新获取 */ }
+/**
+ * 更新所有游戏卡片的语言（同时尝试异步获取翻译名称，失败保留原名）
+ */
+async function updateCardLanguage(lang) {
+  const cards = resultsEl.querySelectorAll('.game-card');
+  const promises = [];
+  for (const card of cards) {
+    const appId = card.dataset.appid;
+    const nameEl = card.querySelector('.game-name');
+    if (!appId || !nameEl) continue;
+    const p = fetchGameName(appId, lang).then(name => {
+      if (name) nameEl.textContent = name;
+    }).catch(() => {});
+    promises.push(p);
   }
+  await Promise.allSettled(promises);
+}
 
+/**
+ * 获取 Steam 价格（对应指定 Steam 商店国家 cc）
+ * GET https://store.steampowered.com/api/appdetails?appids=<id>&cc=<cc>&l=en
+ */
+async function getSteamPrice(appId, cc) {
+  const cacheKey = `${appId}_${cc}`;
+  const cached = priceCache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts < CACHE_TTL)) return cached.data;
+
+  const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=${cc}&l=en`;
+  const res = await proxyFetchWithRetry(url);
+  const data = await res.json();
+  const appData = data[String(appId)];
+  if (appData && appData.success && appData.data) {
+    const priceData = appData.data.price_overview || null;
+    priceCache.set(cacheKey, { data: priceData, ts: Date.now() });
+    return priceData;
+  }
+  return null;
+}
+
+/**
+ * 获取史低价
+ * GET https://www.cheapshark.com/api/1.0/games?steamAppID=<id>
+ *
+ * 返回 { lowest: number (cents?), date: number (unix sec), price: number (cents?) } | null
+ * cheapshark 返回的价格是美元美分（cents 整数），如果没数据返回 null
+ */
+async function getHistoricalLow(steamAppId) {
+  const cached = priceLowCache.get(steamAppId);
+  if (cached && (Date.now() - cached.ts < CACHE_TTL)) return cached.data;
+
+  const url = `https://www.cheapshark.com/api/1.0/games?steamAppID=${steamAppId}`;
   try {
-    const url = 'https://open.er-api.com/v6/latest/USD';
-    const res = await proxyFetch(url);
-    if (!res.ok) throw new Error(`汇率接口失败 (${res.status})`);
-    const data = await res.json();
-    state.exchangeRates = data.rates || {};
-    // 写入 localStorage 缓存
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), rates: state.exchangeRates }));
-    return state.exchangeRates;
-  } catch {
-    state.exchangeRates = {};
-    return state.exchangeRates;
+    const res = await proxyFetchWithRetry(url);
+    const json = await res.json();
+    if (!json || json.length === 0) {
+      priceLowCache.set(steamAppId, { data: null, ts: Date.now() });
+      return null;
+    }
+    const game = json[0];
+    const cheapest = game.cheapest || null;
+    const cheapestEver = game.cheapestEver || null;
+    let result = null;
+    if (cheapestEver) {
+      // cheapestEver.price 是字符串表示的美元金额（如 "1.99"）
+      const lowPriceCents = Math.round(parseFloat(cheapestEver.price) * 100);
+      result = {
+        lowest: lowPriceCents,
+        date: cheapestEver.date ? parseInt(cheapestEver.date) : null, // unix seconds
+        price: cheapest ? Math.round(parseFloat(cheapest) * 100) : lowPriceCents,
+      };
+    } else if (cheapest) {
+      result = {
+        lowest: Math.round(parseFloat(cheapest) * 100),
+        date: null,
+        price: Math.round(parseFloat(cheapest) * 100),
+      };
+    }
+    priceLowCache.set(steamAppId, { data: result, ts: Date.now() });
+    return result;
+  } catch (e) {
+    console.warn(`getHistoricalLow(${steamAppId}) 失败:`, e.message);
+    return null;
   }
 }
 
-// ===== 推荐游戏（热门/打折） =====
+/**
+ * 获取汇率（USD → 所有支持货币）
+ * GET https://open.er-api.com/v6/latest/USD
+ */
+async function fetchExchangeRates() {
+  const url = 'https://open.er-api.com/v6/latest/USD';
+  const res = await fetchWithTimeout(url, {}, 8000);
+  const data = await res.json();
+  if (data.result !== 'success') throw new Error('汇率接口返回异常');
+  return data.rates;
+}
+
+// ===== Featured（推荐游戏）API =====
 
 /**
- * 从 Steam Featured Categories API 获取热门/打折游戏
- * API 会根据 cc 参数返回对应币种的价格
+ * 获取 Steam 推荐列表（featuredcategories）
+ * GET https://store.steampowered.com/api/featuredcategories?cc=<cc>&l=<lang>
  */
 async function fetchFeatured(cc, lang = 'en') {
   const url = `https://store.steampowered.com/api/featuredcategories?cc=${cc}&l=${lang}`;
-  const res = await proxyFetchWithRetry(url, {}, 1);
-  if (!res.ok) throw new Error(`Steam 推荐接口失败 (${res.status})`);
-  const data = await res.json();
-  return data;
+  const res = await proxyFetchWithRetry(url);
+  return await res.json();
 }
 
-/** 将 featured API 返回的条目标准化为通用格式 */
 function normalizeFeaturedItem(item) {
+  if (!item || !item.id) return null;
   return {
     id: item.id,
-    name: item.name,
-    tiny_image: null,
+    name: item.name || '未知游戏',
+    tiny_image: item.tiny_image || '',
     header_image: item.header_image || '',
-    metacritic_score: null,
-    steam_rating_percent: null,
-    release_date: null,
-    price: {
-      final: item.final_price,
-      initial: item.original_price,
-      discount_percent: item.discount_percent || 0,
-    },
+    metacritic_score: item.metacritic_score || 0,
+    steam_rating_percent: item.steam_rating_percent || 0,
+    release_date: item.release_date || '',
+    price: item.price || { final: 0, initial: 0, discount_percent: 0 },
     _hasPrice: true,
   };
 }
 
-/** 从 Steam 搜索页获取指定类别的游戏列表（JSON API，最多 count 条） */
+/**
+ * 获取 Steam 分类搜索（topsellers / specials 等）
+ * GET https://store.steampowered.com/api/search/category?category=<category>&cc=<cc>&l=<lang>&count=<count>
+ */
 async function fetchSearchCategory(category, cc, lang, count = 50) {
-  const filterParam = category === 'specials' ? 'specials=1' : `filter=${category}`;
-  const url = `https://store.steampowered.com/search/results/?json=1&${filterParam}&cc=${cc}&l=${lang}&start=0&count=${count}`;
-  const res = await proxyFetchWithRetry(url, {}, 1);
-  if (!res.ok) throw new Error(`Steam 搜索接口失败 (${res.status})`);
+  const url = `https://store.steampowered.com/api/search/category?category=${category}&cc=${cc}&l=${lang}&count=${count}`;
+  const res = await proxyFetchWithRetry(url);
   const data = await res.json();
   return data.items || [];
 }
 
-/** 标准化搜索结果（无价格信息，通过 loadPriceForCard 异步查询） */
 function normalizeSearchItem(item) {
-  const match = item.logo?.match(/\/apps\/(\d+)\//);
-  const id = match ? parseInt(match[1], 10) : 0;
-  if (!id) return null;
+  if (!item || !item.id) return null;
   return {
-    id,
-    name: item.name || '',
-    tiny_image: null,
-    header_image: item.logo?.replace(/capsule_sm_120\.(jpg|png)/, 'capsule_231x87.$1') || '',
-    metacritic_score: null,
-    steam_rating_percent: null,
-    release_date: null,
+    id: item.id,
+    name: item.name || '未知游戏',
+    tiny_image: item.tiny_image || '',
+    header_image: item.header_image || '',
+    metacritic_score: item.metacritic_score || 0,
+    steam_rating_percent: item.steam_rating_percent || 0,
+    release_date: item.release_date || '',
     price: null,
     _hasPrice: false,
   };
 }
 
-/** 加载推荐游戏（异步，独立状态管理） */
+// ===== 加载推荐游戏（热门游戏 + 打折游戏） =====
+
+/** 初始化两个 featured 视图：获取数据，填入各自的 items，然后切换到当前 tab */
 async function loadFeatured(cc) {
   cc = cc || state.cc;
-  state.view = 'featured';
-  featuredTabsEl.style.display = 'flex';
   hideError();
 
-  // 设置独立 loading 状态
-  state.featured.loading = true;
-  state.featured.error = null;
-  destroyPagination();
-  renderInlineLoading(resultsEl);
+  // 创建两个视图并标记 loading
+  const topView = ensureView(VIEW_FEATURED_TOP);
+  const specialsView = ensureView(VIEW_FEATURED_SPECIALS);
+  topView.loading = true;
+  specialsView.loading = true;
+
+  // 如果当前是 featured 视图，显示 loading
+  const isFeaturedActive = state.activeView && state.activeView.startsWith('featured:');
+  if (isFeaturedActive) {
+    renderInlineLoading(resultsEl);
+  }
 
   try {
-    // 串行获取（避免同时并发导致代理限流），各自独立 catch
     let featuredData, topsellersExtra, specialsExtra;
 
     try {
@@ -629,9 +567,6 @@ async function loadFeatured(cc) {
     } catch (e) {
       console.warn('fetchFeatured 失败:', e.message);
     }
-
-    // 视图守卫
-    if (state.view !== 'featured') return;
 
     try {
       topsellersExtra = await fetchSearchCategory('topsellers', cc, state.lang);
@@ -649,82 +584,76 @@ async function loadFeatured(cc) {
       throw new Error('热门游戏接口全部失败');
     }
 
-    state.featured.data = featuredData;
-    state.featured.searchExtra = {
-      topsellers: (topsellersExtra || []).map(normalizeSearchItem).filter(Boolean),
-      specials: (specialsExtra || []).map(normalizeSearchItem).filter(Boolean),
-    };
-    state.featured.loading = false;
-    renderFeatured(state.featured.tab);
+    // 填充 top_sellers 视图
+    fillFeaturedView(VIEW_FEATURED_TOP, featuredData, topsellersExtra, 'top_sellers');
+    // 填充 specials 视图
+    fillFeaturedView(VIEW_FEATURED_SPECIALS, featuredData, specialsExtra, 'specials');
+
+    // 如果当前是 featured，重新渲染当前视图
+    if (state.activeView && state.activeView.startsWith('featured:')) {
+      renderCurrentView();
+      // 更新名称
+      updateCardLanguage(state.lang).catch(() => {});
+    }
   } catch (err) {
-    state.featured.loading = false;
-    state.featured.error = err.message;
-    renderInlineError(resultsEl, `无法加载推荐游戏：${escapeHtml(err.message)}`);
+    topView.loading = false;
+    specialsView.loading = false;
+    topView.error = err.message;
+    specialsView.error = err.message;
+    if (isFeaturedActive) {
+      renderInlineError(resultsEl, `无法加载推荐游戏：${escapeHtml(err.message)}`);
+    }
   }
 }
 
-/** 渲染指定类别的推荐游戏（从缓存渲染，不触发网络请求） */
-function renderFeatured(category) {
-  if (state.featured.loading) return; // 正在加载中，不打断
+/** 填充一个 featured 视图的数据 */
+function fillFeaturedView(viewKey, featuredData, extraItems, category) {
+  const view = state.views[viewKey];
+  view.loading = false;
+  view.error = null;
 
-  const data = state.featured.data;
-  if (!data || !data[category]) {
-    destroyPagination();
-    resultsEl.innerHTML = `
-      <div class="no-results">
-        <div class="icon">📭</div>
-        <div class="text">暂无数据</div>
-      </div>`;
-    return;
-  }
-
-  const rawItems = data[category].items || [];
-  const extraItems = state.featured.searchExtra?.[category] || [];
-
-  if (rawItems.length === 0 && extraItems.length === 0) {
-    destroyPagination();
-    resultsEl.innerHTML = `
-      <div class="no-results">
-        <div class="icon">📭</div>
-        <div class="text">该分类暂无游戏</div>
-      </div>`;
-    return;
-  }
+  const rawItems = (featuredData[category] && featuredData[category].items) || [];
+  const extra = (extraItems || []).map(normalizeSearchItem).filter(Boolean);
 
   // 合并：先取 featuredcategories 的有价格条目，再追加无价格的搜索条目（去重）
-  const normalized = rawItems.map(normalizeFeaturedItem);
+  const normalized = rawItems.map(normalizeFeaturedItem).filter(Boolean);
   const seen = new Set(normalized.map(i => i.id));
-  for (const extra of extraItems) {
-    if (!seen.has(extra.id)) {
-      seen.add(extra.id);
-      normalized.push(extra);
+  for (const item of extra) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      normalized.push(item);
     }
   }
 
-  renderResults(normalized);
-  // 推荐视图更新后，确保游戏名称为当前语言（featuredcategories 返回的名称可能不含本地化名）
-  updateCardLanguage(state.lang).catch(() => {});
+  view.items = normalized;
+  view.rendered = 0;
+  view.rawData = featuredData;
+  view.searchExtra = extraItems;
 }
 
-/** 设置推荐游戏标签页切换（纯本地渲染，无网络请求） */
+// ===== 推荐游戏标签切换 =====
+
 function setupFeaturedTabs() {
   featuredTabsEl.addEventListener('click', (e) => {
     const tab = e.target.closest('.featured-tab');
     if (!tab) return;
 
     const category = tab.dataset.category;
-    if (state.view === 'featured' && category === state.featured.tab) return;
+    const viewKey = `featured:${category}`;
+    if (state.activeView === viewKey) return;
 
-    // 切换到推荐标签
+    // 切换推荐标签 UI
     searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    state.featured.tab = category;
-    state.view = 'featured';
-    state.activeTabId = null;
 
-    // 从缓存渲染，不请求网络
-    renderFeatured(category);
+    switchToView(viewKey);
+
+    // 当前视图如果没数据但 data 存在（刚切换，还没请求完毕），尝试渲染
+    const view = state.views[viewKey];
+    if (!view || (view.items.length === 0 && !view.loading && !view.error)) {
+      // 可能还没有加载，等 loadFeatured 完成
+    }
   });
 
   // 搜索结果标签点击/关闭
@@ -739,80 +668,73 @@ function setupFeaturedTabs() {
     if (!tab) return;
 
     const tabId = parseInt(tab.dataset.tabId);
-    if (state.view === 'search_tab' && state.activeTabId === tabId) return;
+    const viewKey = `tab:${tabId}`;
+    if (state.activeView === viewKey) return;
     activateSearchTab(tabId);
   });
 }
 
-// ===== 搜索标签管理 + 搜索逻辑 =====
+// ===== 搜索标签管理 =====
 
-/** 激活指定的搜索结果标签并渲染其内容 */
+/** 激活指定的搜索标签（tabId 为数字 id，不含 'tab:' 前缀） */
 function activateSearchTab(tabId) {
+  const viewKey = `tab:${tabId}`;
+  const view = state.views[viewKey];
+  if (!view) return;
+
+  // 切换 UI
   featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
   searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
-
   const tabEl = searchTabsEl.querySelector(`[data-tab-id="${tabId}"]`);
   if (tabEl) tabEl.classList.add('active');
 
-  state.view = 'search_tab';
-  state.activeTabId = tabId;
+  switchToView(viewKey);
 
-  const tabState = state.searchTabs.find(t => t.id === tabId);
-  if (!tabState) return;
-
-  destroyPagination();
-
-  if (tabState.loading) {
-    renderInlineLoading(resultsEl);
-  } else if (tabState.error) {
-    renderInlineError(resultsEl, `搜索失败：${escapeHtml(tabState.error)}`);
-  } else if (tabState.results.length === 0) {
-    resultsEl.innerHTML = `
-      <div class="no-results">
-        <div class="icon">🔍</div>
-        <div class="text">没有找到 "${escapeHtml(tabState.query)}" 相关游戏</div>
-      </div>`;
-  } else {
-    renderResults(tabState.results);
-    // 切换语言后激活旧标签，需要更新游戏名称
+  // 如果有已加载的结果但不是空，更新名称
+  if (view.items.length > 0) {
     updateCardLanguage(state.lang).catch(() => {});
   }
 }
 
-/** 关闭指定搜索结果标签，自动切换到下一个可用视图 */
+/** 关闭搜索标签 */
 function closeSearchTab(tabId) {
-  const idx = state.searchTabs.findIndex(t => t.id === tabId);
-  if (idx === -1) return;
+  const viewKey = `tab:${tabId}`;
+  if (!state.views[viewKey]) return;
 
-  // 关闭前保存该标签的滚动位置
-  saveScroll();
+  // 保存当前滚动
+  if (state.activeView === viewKey) {
+    const view = state.views[viewKey];
+    if (view) view.scrollTop = resultsEl.scrollTop;
+  }
 
-  state.searchTabs.splice(idx, 1);
+  // 删除视图
+  delete state.views[viewKey];
 
+  // 删除标签 UI
   const tabEl = searchTabsEl.querySelector(`[data-tab-id="${tabId}"]`);
   if (tabEl) tabEl.remove();
 
-  if (state.activeTabId === tabId) {
-    // 切到最近的历史选项卡，否则回到推荐
+  if (state.activeView === viewKey) {
+    // 切换到最近的历史搜索标签，否则回推荐
     const remaining = searchTabsEl.querySelectorAll('.search-tab');
     if (remaining.length > 0) {
       const lastTab = remaining[remaining.length - 1];
       activateSearchTab(parseInt(lastTab.dataset.tabId));
     } else {
-      state.view = 'featured';
-      state.activeTabId = null;
+      // 回到当前活跃的 featured tab
+      const activeFeatured = featuredTabsEl.querySelector('.featured-tab.active');
+      const category = activeFeatured ? activeFeatured.dataset.category : 'top_sellers';
+      const featuredKey = `featured:${category}`;
       featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
-      const defaultTab = featuredTabsEl.querySelector('[data-category="top_sellers"]');
-      if (defaultTab) {
-        defaultTab.classList.add('active');
-        state.featured.tab = 'top_sellers';
-        renderFeatured('top_sellers');
-      }
+      if (activeFeatured) activeFeatured.classList.add('active');
+      switchToView(featuredKey);
     }
   }
 }
 
-/** 搜索并展示结果。支持可选参数：query（搜索词，默认取输入框）、force（强制重新搜索当前标签） */
+// ===== 搜索逻辑 =====
+
+/** 搜索并展示结果。可选参数：query（搜索词，默认取输入框）、force（强制重新搜索当前标签） */
 async function doSearch(query, force) {
   if (!query) {
     query = searchInput.value.trim();
@@ -826,51 +748,65 @@ async function doSearch(query, force) {
 
   // 如果已有同查询标签且非强制刷新，直接切过去
   if (!force) {
-    const existing = state.searchTabs.find(t => t.query === query);
-    if (existing) {
-      activateSearchTab(existing.id);
-      return;
+    for (const [key, view] of Object.entries(state.views)) {
+      if (key.startsWith('tab:') && view.query === query) {
+        const tabId = parseInt(key.slice(4));
+        activateSearchTab(tabId);
+        return;
+      }
     }
   }
 
   // force 刷新：重用已有标签（同查询），否则创建新标签
-  let id, tabState, tabEl;
-  const existingTab = force && state.searchTabs.find(t => t.query === query);
+  let tabId, viewKey, view;
 
-  if (existingTab) {
-    id = existingTab.id;
-    tabState = existingTab;
-    tabState.results = [];
-    tabState.loading = true;
-    tabState.error = null;
-    tabEl = searchTabsEl.querySelector(`[data-tab-id="${id}"]`);
-    // 确保标签激活
+  // 查找现有同查询标签
+  let existingKey = null;
+  for (const [key, v] of Object.entries(state.views)) {
+    if (key.startsWith('tab:') && v.query === query) {
+      existingKey = key;
+      break;
+    }
+  }
+
+  if (existingKey && force) {
+    // 复用已有标签并重新搜索
+    tabId = parseInt(existingKey.slice(4));
+    viewKey = existingKey;
+    view = state.views[viewKey];
+    view.items = [];
+    view.rendered = 0;
+    view.loading = true;
+    view.error = null;
+    view.query = query;
+
+    // 激活标签 UI
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
     searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+    const tabEl = searchTabsEl.querySelector(`[data-tab-id="${tabId}"]`);
     if (tabEl) tabEl.classList.add('active');
-    state.view = 'search_tab';
-    state.activeTabId = id;
-    destroyPagination();
+
+    switchToView(viewKey);
     renderInlineLoading(resultsEl);
   } else {
-    id = state.tabIdCounter++;
-    tabState = { id, query, results: [], loading: true, error: null };
-    state.searchTabs.push(tabState);
+    // 创建新标签
+    tabId = state.tabIdCounter++;
+    viewKey = `tab:${tabId}`;
+    view = { items: [], rendered: 0, scrollTop: 0, loading: true, error: null, query };
+    state.views[viewKey] = view;
 
-    tabEl = document.createElement('button');
+    // 创建标签 UI
+    const tabEl = document.createElement('button');
     tabEl.className = 'search-tab active';
-    tabEl.dataset.tabId = id;
-    tabEl.innerHTML = `<span class="search-tab-label">🔍 ${escapeHtml(query)}</span><span class="close-tab" data-tab-id="${id}">✕</span>`;
+    tabEl.dataset.tabId = tabId;
+    tabEl.innerHTML = `<span class="search-tab-label">🔍 ${escapeHtml(query)}</span><span class="close-tab" data-tab-id="${tabId}">✕</span>`;
     searchTabsEl.appendChild(tabEl);
 
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
     searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
     tabEl.classList.add('active');
 
-    state.view = 'search_tab';
-    state.activeTabId = id;
-
-    destroyPagination();
+    switchToView(viewKey);
     renderInlineLoading(resultsEl);
   }
 
@@ -893,15 +829,16 @@ async function doSearch(query, force) {
       }
     }
 
-    // 更新标签状态
-    const tabStateRef = state.searchTabs.find(t => t.id === id);
-    if (!tabStateRef) return; // 标签已被关闭
+    // 检查视图是否还存在
+    const currentViewState = state.views[viewKey];
+    if (!currentViewState) return; // 标签已被关闭
 
-    tabStateRef.loading = false;
-    tabStateRef.results = items;
+    currentViewState.loading = false;
+    currentViewState.items = items;
+    currentViewState.rendered = 0;
 
     // 仅当此标签仍是激活态时才渲染
-    if (state.activeTabId !== id) return;
+    if (state.activeView !== viewKey) return;
 
     if (items.length === 0) {
       resultsEl.innerHTML = `
@@ -910,44 +847,38 @@ async function doSearch(query, force) {
           <div class="text">没有找到 "${escapeHtml(query)}" 相关游戏<br><span style="color:#444;font-size:0.85em;">当前搜索语言：${getLangNative(state.lang)}，可尝试切换语言重新搜索</span></div>
         </div>`;
     } else {
-      renderResults(items);
-      // 渲染后立即更新所有卡片名称为当前语言（AppDetails API 比搜索 API 返回的名称更准确）
+      renderCurrentView();
+      // 渲染后立即更新所有卡片名称为当前语言
       updateCardLanguage(state.lang).catch(() => {});
     }
   } catch (err) {
-    const tabStateRef = state.searchTabs.find(t => t.id === id);
-    if (tabStateRef) {
-      tabStateRef.loading = false;
-      tabStateRef.error = err.message;
+    const currentViewState = state.views[viewKey];
+    if (currentViewState) {
+      currentViewState.loading = false;
+      currentViewState.error = err.message;
     }
-    if (state.activeTabId === id) {
+    if (state.activeView === viewKey) {
       renderInlineError(resultsEl, `搜索失败：${escapeHtml(err.message)}`);
     }
   }
 }
 
-/** 渲染搜索结果列表（通用，featured 和 search 共用） */
-function renderResults(items) {
-  const restoreKey = state.view === 'featured'
-    ? `featured:${state.featured.tab}`
-    : (state.activeTabId ? `tab:${state.activeTabId}` : null);
+// ===== 渲染（通用，所有视图共用） =====
 
-  destroyPagination();
-  resultsEl.innerHTML = '';
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
 
-  if (items.length === 0) {
-    resultsEl.innerHTML = `
-      <div class="no-results">
-        <div class="icon">🔍</div>
-        <div class="text">没有找到相关游戏</div>
-      </div>`;
-    return;
-  }
-
-  // 启动下滑分页，每批 10 个，不写死总数
-  initPagination(items);
-
-  restoreScroll(restoreKey);
+function formatDate(ts) {
+  if (!ts) return '';
+  // ts 是 unix 秒
+  const d = new Date(ts * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** 创建单个游戏卡片 */
@@ -1046,90 +977,111 @@ function renderCardPriceInline(card, appId, price, cc) {
 
 // ===== 下滑分页（无限滚动） =====
 
-/** 初始化分页并渲染第一批 */
-function initPagination(items) {
+/** 初始化分页并渲染第一批。如果 startFrom > 0，则直接渲染到 startFrom 的位置 */
+function initPagination(items, startFrom = 0) {
   destroyPagination();
-  if (items.length === 0) return;
-
-  state.page.active = true;
-  state.page.items = items;
-  state.page.rendered = 0;
 
   // 创建底部哨兵
   const sentinel = document.createElement('div');
   sentinel.className = 'scroll-sentinel';
-  state.page.sentinel = sentinel;
+
+  // 存储在 view 上，方便切换时销毁/恢复
+  const view = currentView();
+  if (view) {
+    view._observer = null;
+    view._sentinel = sentinel;
+  }
+
   resultsEl.appendChild(sentinel);
 
   // IntersectionObserver：哨兵进入视口 → 追加一批
-  state.page.observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && state.page.active) {
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
       renderNextBatch();
     }
   }, { rootMargin: '300px' });
-  state.page.observer.observe(sentinel);
+  observer.observe(sentinel);
 
-  // 渲染第一批
-  renderNextBatch();
+  if (view) view._observer = observer;
+
+  // 如果 startFrom > 0，直接渲染到该位置
+  if (startFrom > 0) {
+    const fragment = document.createDocumentFragment();
+    const end = Math.min(startFrom, items.length);
+    for (let i = 0; i < end; i++) {
+      fragment.appendChild(createGameCard(items[i]));
+    }
+    resultsEl.insertBefore(fragment, sentinel);
+    if (view) view.rendered = end;
+  } else {
+    // 渲染第一批
+    renderNextBatch();
+  }
 }
 
 /** 销毁分页状态 */
 function destroyPagination() {
-  state.page.active = false;
-  if (state.page.observer) {
-    state.page.observer.disconnect();
-    state.page.observer = null;
+  const view = currentView();
+  if (view) {
+    if (view._observer) {
+      view._observer.disconnect();
+      view._observer = null;
+    }
+    if (view._sentinel && view._sentinel.parentNode) {
+      view._sentinel.parentNode.removeChild(view._sentinel);
+    }
+    view._sentinel = null;
   }
-  if (state.page.sentinel && state.page.sentinel.parentNode) {
-    state.page.sentinel.parentNode.removeChild(state.page.sentinel);
-  }
-  state.page.sentinel = null;
-  state.page.items = [];
-  state.page.rendered = 0;
 }
 
-/** 追加下一批卡片到 DOM */
+/** 追加下一批卡片到 DOM（从 state.views.activeView 读取分页数据） */
 function renderNextBatch() {
-  const { items, rendered, batch } = state.page;
-  if (!state.page.active || rendered >= items.length) return;
+  const view = currentView();
+  if (!view) return;
+  const { items, rendered } = view;
+  const batch = 10;
+
+  if (rendered >= items.length) return;
 
   const end = Math.min(rendered + batch, items.length);
   const fragment = document.createDocumentFragment();
   for (let i = rendered; i < end; i++) {
     fragment.appendChild(createGameCard(items[i]));
   }
+
   // 插入到哨兵之前
-  if (state.page.sentinel && state.page.sentinel.parentNode) {
-    resultsEl.insertBefore(fragment, state.page.sentinel);
+  if (view._sentinel && view._sentinel.parentNode) {
+    resultsEl.insertBefore(fragment, view._sentinel);
   }
-  state.page.rendered = end;
+  view.rendered = end;
 
   // 全部加载完毕 → 移除哨兵和 observer
   if (end >= items.length) {
-    if (state.page.observer) state.page.observer.disconnect();
-    if (state.page.sentinel && state.page.sentinel.parentNode) {
-      state.page.sentinel.parentNode.removeChild(state.page.sentinel);
+    if (view._observer) view._observer.disconnect();
+    if (view._sentinel && view._sentinel.parentNode) {
+      view._sentinel.parentNode.removeChild(view._sentinel);
     }
-    state.page.sentinel = null;
-    state.page.observer = null;
+    view._sentinel = null;
+    view._observer = null;
   }
 }
 
-/** 为主货币加载价格 */
-async function loadPriceForCard(appId, card, cc) {
-  const priceRow = card.querySelector(`#price-row-${appId}`);
-  if (!priceRow) return;
+// ===== 价格加载 =====
 
+/** 为单个卡片加载主货币价格并渲染 */
+async function loadPriceForCard(appId, card, cc) {
   try {
     const price = await getSteamPrice(appId, cc);
-    const ccInfo = CC_CURRENCIES.find(c => c.cc === cc);
+    const priceRow = card.querySelector(`#price-row-${appId}`);
+    if (!priceRow) return;
 
-    if (!price || !price.final) {
-      priceRow.innerHTML = `<span class="price-na">暂无价格信息</span>`;
+    if (!price) {
+      priceRow.innerHTML = `<span class="price-na">💰 价格未知</span>`;
       return;
     }
 
-    const currencyCode = price.currency || ccInfo?.code || 'USD';
+    const ccInfo = CC_CURRENCIES.find(c => c.cc === cc);
+    const currencyCode = ccInfo?.code || 'USD';
     const symbol = getCurrencySymbol(currencyCode);
     const finalPrice = formatPrice(price.final, currencyCode);
     const initialPrice = formatPrice(price.initial, currencyCode);
@@ -1144,160 +1096,171 @@ async function loadPriceForCard(appId, card, cc) {
     } else {
       html = `<span class="price-current">${symbol}${finalPrice}</span>`;
     }
-
     priceRow.innerHTML = html;
     loadHistoryLow(appId, card);
-  } catch (err) {
-    priceRow.innerHTML = `<span class="price-na">价格获取失败</span>`;
+  } catch (e) {
+    console.warn(`loadPriceForCard(${appId}) 失败:`, e.message);
+    const priceRow = card.querySelector(`#price-row-${appId}`);
+    if (priceRow) {
+      priceRow.innerHTML = `<span class="price-na">💰 价格获取失败</span>`;
+    }
   }
 }
 
-/** 史低价格查询（渲染到卡片右侧 aside 区域） */
+/** 为单个卡片加载史低价格并渲染到侧栏 */
 async function loadHistoryLow(appId, card) {
-  const asideEl = card.querySelector(`#aside-${appId}`);
-  if (!asideEl) return;
+  const aside = card.querySelector(`#aside-${appId}`);
+  if (!aside) return;
 
   try {
-    const data = await getHistoricalLow(appId);
-    if (data === null) {
-      asideEl.innerHTML = `<span class="price-na">无史低</span>`;
+    const low = await getHistoricalLow(appId);
+    if (!low || !low.lowest) {
+      aside.innerHTML = `<span class="price-na">📉 无史低数据</span>`;
       return;
     }
 
-    // CheapShark API 仅返回 USD 史低
-    const isCurrentLow = data.currentUsd !== null && data.lowestUsd >= data.currentUsd - 0.01;
+    const lowFormatted = formatPrice(low.lowest, 'USD');
+    const dateStr = low.date ? formatDate(low.date) : '';
+    const dateHtml = dateStr ? `<span class="low-date">📅 ${dateStr}</span>` : '';
 
-    let html = `<span class="historical-low">
-      <span class="label">📉 史低</span>
-      <span class="lowest-ever">$${data.lowestUsd.toFixed(2)}</span>`;
-    if (data.lowestDate) {
-      html += `<span class="low-date">${formatDate(data.lowestDate)}</span>`;
-    }
-    if (isCurrentLow) {
-      html += `<span class="match-current">当前史低</span>`;
-    }
-    html += `</span>`;
-    asideEl.innerHTML = html;
-  } catch {
-    const el = card.querySelector(`#aside-${appId}`);
-    if (el) el.innerHTML = `<span class="price-na">史低查询失败</span>`;
+    // 检查当前价格是否等于史低
+    const priceRow = card.querySelector(`#price-row-${appId}`);
+    const isMatch = priceRow && priceRow.textContent.includes('$' + (low.price / 100).toFixed(2));
+
+    aside.innerHTML = `
+      <div class="historical-low${isMatch ? ' match-current' : ''}">
+        <div class="label">📉 史低</div>
+        <div class="lowest-ever">${lowFormatted}</div>
+        ${dateHtml}
+      </div>`;
+  } catch (e) {
+    console.warn(`loadHistoryLow(${appId}) 失败:`, e.message);
+    aside.innerHTML = `<span class="price-na">📉 史低获取失败</span>`;
   }
 }
 
-/** 加载多币种详情 */
-async function loadDetailPrices(appId, card) {
-  if (card.dataset.detailLoaded) return;
-  card.dataset.detailLoaded = '1';
+// ===== 多币种详情 =====
 
+/** 加载并渲染多币种价格详情（展开卡片的展开内容） */
+async function loadDetailPrices(appId, card) {
   const detailEl = card.querySelector(`#detail-${appId}`);
   if (!detailEl) return;
 
-  // 全局缓存命中
-  if (detailCache.has(appId)) {
-    detailEl.innerHTML = detailCache.get(appId);
+  const cacheKey = appId;
+  const cached = detailCache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts < CACHE_TTL)) {
+    detailEl.innerHTML = cached.html;
+    card.dataset.detailLoaded = 'true';
+    loadDetailHistoryLows(appId, detailEl);
     return;
   }
 
-  // 平行加载：先获取汇率（如果尚未缓存），再获取所有币种价格
-  await fetchExchangeRates();
-
-  detailEl.innerHTML = `<div class="loading" style="padding:16px;"><div class="spinner"></div><span>加载多币种价格...</span></div>`;
-
-  try {
-    const promises = CC_CURRENCIES.map(async (ccInfo) => {
-      try {
-        const price = await getSteamPrice(appId, ccInfo.cc);
-        return { ccInfo, price };
-      } catch {
-        return { ccInfo, price: null };
-      }
-    });
-
-    const results = await Promise.all(promises);
-
-    let tableHtml = `<table class="currency-table">
-      <thead><tr>
-        <th>货币</th>
-        <th>当前价格</th>
-        <th>原价</th>
-        <th>折扣</th>
-        <th>历史史低</th>
-      </tr></thead><tbody>`;
-
-    for (const { ccInfo, price } of results) {
-      const symbol = getCurrencySymbol(ccInfo.code);
-      const finalPrice = price ? formatPrice(price.final, ccInfo.code) : null;
-      const initialPrice = price ? formatPrice(price.initial, ccInfo.code) : null;
-      const discount = price?.discount_percent || 0;
-
-      tableHtml += `<tr>
-        <td><span class="curr-code">${ccInfo.flag} ${ccInfo.code}</span></td>
-        <td class="curr-price">${finalPrice ? symbol + finalPrice : '<span class="curr-na">N/A</span>'}</td>
-        <td>${initialPrice && discount > 0 ? '<span style="color:#666;text-decoration:line-through;">' + symbol + initialPrice + '</span>' : '-'}</td>
-        <td>${discount > 0 ? `<span class="curr-sale">-${discount}%</span>` : '-'}</td>
-        <td id="detail-low-${appId}-${ccInfo.cc}" class="curr-na">${ccInfo.cc === 'us' ? '⏳' : '-'}</td>
-      </tr>`;
-    }
-
-    tableHtml += `</tbody></table>`;
-    detailEl.innerHTML = tableHtml;
-
-    // 加载史低数据（各币种）
-    await loadDetailHistoryLows(appId, detailEl);
-
-    // 缓存完整详情 HTML（含史低），下次同一 appId 直接复用
-    detailCache.set(appId, detailEl.innerHTML);
-  } catch {
-    detailEl.innerHTML = `<span class="price-na">多币种价格加载失败</span>`;
-  }
-}
-
-/** 详情中的史低价格（仅 USD 列） */
-async function loadDetailHistoryLows(appId, detailEl) {
-  try {
-    const data = await getHistoricalLow(appId);
-    const cell = detailEl.querySelector(`#detail-low-${appId}-us`);
-    if (!cell) return;
-
-    if (data === null) {
-      cell.textContent = 'N/A';
+  // 异步获取汇率（首次调用）
+  if (!state.exchangeRates) {
+    try {
+      state.exchangeRates = await fetchExchangeRates();
+    } catch (e) {
+      detailEl.innerHTML = `<div style="color:#f87171;padding:12px;">⚠️ 汇率获取失败，无法显示多币种价格</div>`;
       return;
     }
-
-    cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">$${data.lowestUsd.toFixed(2)}</span>`;
-    cell.className = 'curr-low';
-  } catch {
-    const cell = detailEl.querySelector(`#detail-low-${appId}-us`);
-    if (cell) cell.textContent = 'N/A';
   }
+
+  // 并发获取所有货币的价格
+  const pricePromises = CC_CURRENCIES.map(async (c) => {
+    let price;
+    if (c.cc === state.cc) {
+      // 当前货币：从卡片 DOM 中读取
+      const priceRow = card.querySelector(`#price-row-${appId}`);
+      const el = priceRow?.querySelector('.price-current');
+      price = el ? el.textContent : '—';
+    } else {
+      // 其他货币：先获取 USD 价格，再换算
+      const usdPrice = await getSteamPrice(appId, 'us');
+      if (usdPrice && usdPrice.final !== undefined) {
+        const rate = state.exchangeRates[c.code];
+        if (rate) {
+          const usdCents = usdPrice.final;
+          const usdAmount = usdCents / 100;
+          const local = formatUsdToLocal(usdAmount, c.code);
+          price = local || '—';
+        } else {
+          price = '—';
+        }
+      } else {
+        price = '—';
+      }
+    }
+    return { cc: c.cc, flag: c.flag, code: c.code, price, name: c.name };
+  });
+
+  const results = await Promise.allSettled(pricePromises);
+  const rows = results.map(r => {
+    const p = r.status === 'fulfilled' ? r.value : { cc: '?', flag: '', code: '?', price: '—', name: '?' };
+    return `<tr><td class="curr-code">${p.flag} ${p.code}</td><td class="curr-price">${p.price}</td><td class="curr-sale">${p.name}</td></tr>`;
+  }).join('');
+
+  const html = `
+    <table class="currency-table">
+      <thead><tr><th>货币</th><th>当前价格</th><th>地区</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div id="detail-lows-${appId}">
+      <div style="color:#888;font-size:0.8em;padding:8px 0;">📉 正在查询各货币史低...</div>
+    </div>`;
+
+  detailEl.innerHTML = html;
+  detailCache.set(cacheKey, { html, ts: Date.now() });
+  card.dataset.detailLoaded = 'true';
+
+  // 异步查询各货币史低
+  loadDetailHistoryLows(appId, detailEl);
 }
 
-/** HTML 转义 */
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+/** 加载多币种史低并更新已展开的 detail 区域 */
+async function loadDetailHistoryLows(appId, detailEl) {
+  const lowContainer = detailEl.querySelector(`#detail-lows-${appId}`);
+  if (!lowContainer) return;
 
-/** 格式化 Unix 时间戳 → YYYY-MM-DD */
-function formatDate(ts) {
-  const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-// ===== 事件绑定 =====
-
-/** 通用自定义下拉框：点击外部关闭 */
-document.addEventListener('click', (e) => {
-  const openSelect = document.querySelector('.custom-select.open');
-  if (!openSelect) return;
-  if (!openSelect.contains(e.target)) {
-    openSelect.classList.remove('open');
+  const low = await getHistoricalLow(appId);
+  if (!low || !low.lowest) {
+    lowContainer.innerHTML = `<div style="color:#444;font-size:0.8em;padding:8px 0;">📉 无史低数据</div>`;
+    return;
   }
-});
+
+  const usdLowCents = low.lowest;
+  const usdLowAmount = usdLowCents / 100;
+
+  let rows = '';
+  for (const c of CC_CURRENCIES) {
+    let lowPrice;
+    if (c.cc === 'us') {
+      lowPrice = formatPrice(usdLowCents, 'USD');
+    } else {
+      const rate = state.exchangeRates?.[c.code];
+      if (rate) {
+        const local = usdLowAmount * rate;
+        const symbol = getCurrencySymbol(c.code);
+        if (c.code === 'JPY' || c.code === 'KRW') {
+          lowPrice = `${symbol}${Math.round(local).toLocaleString()}`;
+        } else {
+          lowPrice = `${symbol}${local.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+      } else {
+        lowPrice = '—';
+      }
+    }
+    rows += `<tr><td class="curr-code">${c.flag} ${c.code}</td><td class="curr-low">${lowPrice}</td></tr>`;
+  }
+
+  lowContainer.innerHTML = `
+    <table class="currency-table">
+      <thead><tr><th>货币</th><th>史低价格</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="color:#444;font-size:0.75em;padding:4px 0;">史低日期: ${low.date ? formatDate(low.date) : '未知'}</div>`;
+}
+
+// ===== 货币选择 =====
 
 /** 设置货币下拉选择框（自定义） */
 function setupCurrencySelect() {
@@ -1334,17 +1297,24 @@ function setupCurrencySelect() {
     state.cc = cc;
     renderOptions();
     container.classList.remove('open');
-    if (state.view === 'featured') {
-      loadFeatured(cc);
-    } else {
-      const cards = resultsEl.querySelectorAll('.game-card');
-      for (const card of cards) {
-        const appId = card.dataset.appid;
-        loadPriceForCard(appId, card, cc);
+
+    // 重新加载当前视图的价格
+    const view = currentView();
+    if (view && view.items.length > 0) {
+      if (state.activeView && state.activeView.startsWith('featured:')) {
+        loadFeatured(cc);
+      } else {
+        const cards = resultsEl.querySelectorAll('.game-card');
+        for (const card of cards) {
+          const appId = card.dataset.appid;
+          loadPriceForCard(appId, card, cc);
+        }
       }
     }
   });
 }
+
+// ===== 语言选择 =====
 
 /** 设置语言下拉选择框（自定义） */
 function setupLangSelect() {
@@ -1385,22 +1355,23 @@ function setupLangSelect() {
     searchInput.placeholder = `🔍 ${cur ? cur.native + ' · ' : ''}搜游戏名称...`;
     searchInput.lang = lang.replace('_', '-');
 
-    if (state.view === 'featured') {
+    // 根据当前视图重新获取数据
+    if (state.activeView && state.activeView.startsWith('featured:')) {
       loadFeatured(state.cc);
-    } else if (state.view === 'search_tab' && state.activeTabId) {
-      const activeTab = state.searchTabs.find(t => t.id === state.activeTabId);
-      if (activeTab && activeTab.results) {
-        // 重新搜索当前激活标签
-        doSearch(activeTab.query, true);
+    } else if (state.activeView && state.activeView.startsWith('tab:')) {
+      const view = currentView();
+      if (view && view.query) {
+        doSearch(view.query, true);
       }
     }
 
-    // 更新所有可见卡片的名称（包括缓存标签页和搜索历史标签）
+    // 更新所有可见卡片的名称
     updateCardLanguage(lang).catch(() => {});
   });
 }
 
-/** 搜索事件 */
+// ===== 搜索事件 =====
+
 function setupSearch() {
   const triggerSearch = () => doSearch();
   searchBtn.addEventListener('click', triggerSearch);
@@ -1410,15 +1381,30 @@ function setupSearch() {
 }
 
 // ===== 初始化 =====
+
+function initActiveFeaturedTab() {
+  // 默认激活 top_sellers
+  const defaultTab = featuredTabsEl.querySelector('[data-category="top_sellers"]');
+  if (defaultTab) defaultTab.classList.add('active');
+}
+
 async function init() {
   setupCurrencySelect();
   setupLangSelect();
   setupSearch();
   setupFeaturedTabs();
+  initActiveFeaturedTab();
+
   // 设置初始搜索框提示
   const cur = LANGUAGES.find(l => l.code === state.lang);
   searchInput.placeholder = `🔍 ${cur ? cur.native + ' · ' : ''}搜游戏名称...`;
   searchInput.lang = state.lang.replace('_', '-');
+
+  // 初始视图设为 featured:top_sellers 并加载数据
+  state.activeView = VIEW_FEATURED_TOP;
+  ensureView(VIEW_FEATURED_TOP);
+  ensureView(VIEW_FEATURED_SPECIALS);
+  renderInlineLoading(resultsEl);
   await loadFeatured();
   searchInput.focus();
 }
