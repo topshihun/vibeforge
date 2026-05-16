@@ -129,6 +129,8 @@ const state = {
     sentinel: null, // 底部哨兵元素
   },
   exchangeRates: null,    // USD → * 汇率缓存
+  /** 滚动位置缓存：{ 'featured:top_sellers': 0, 'tab:3': 150 } */
+  scrollPositions: {},
 };
 
 // ===== 史低缓存 =====
@@ -138,6 +140,12 @@ const CACHE_TTL = 3600_000; // 1 小时
 
 /** 多语言游戏名字缓存：Map<appId, Map<lang, name>> */
 const nameCache = new Map();
+
+/** 内存缓存：getSteamPrice 结果（按 appId_cc 缓存），1 小时后过期 */
+const priceCache = new Map();
+
+/** 内存缓存：多币种详情 HTML 结果，1 小时后过期 */
+const detailCache = new Map();
 
 // ===== DOM 引用 =====
 const $ = id => document.getElementById(id);
@@ -389,13 +397,24 @@ async function updateCardLanguage(lang) {
 
 /** Steam AppDetails — 获取指定货币的价格 */
 async function getSteamPrice(appId, cc) {
+  const cacheKey = `${appId}_${cc}`;
+  if (priceCache.has(cacheKey)) {
+    const cached = priceCache.get(cacheKey);
+    if (Date.now() - cached.ts < CACHE_TTL) return cached.data;
+    priceCache.delete(cacheKey);
+  }
+
   const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=${cc}&filters=price_overview`;
   const res = await proxyFetch(url);
   if (!res.ok) throw new Error(`获取价格失败 (${res.status})`);
   const data = await res.json();
   const app = data[String(appId)];
   if (!app || !app.success) return null;
-  return app.data?.price_overview || null;
+  const result = app.data?.price_overview || null;
+  if (result) {
+    priceCache.set(cacheKey, { ts: Date.now(), data: result });
+  }
+  return result;
 }
 
 /** CheapShark — 获取史低价格（返回 USD + 史低日期 + 原始价格）
@@ -878,6 +897,14 @@ async function doSearch(query, force) {
 
 /** 渲染搜索结果列表（通用，featured 和 search 共用） */
 function renderResults(items) {
+  // 保存当前视图的滚动位置
+  const saveKey = state.view === 'featured'
+    ? `featured:${state.featured.tab}`
+    : (state.activeTabId ? `tab:${state.activeTabId}` : null);
+  if (saveKey) {
+    state.scrollPositions[saveKey] = resultsEl.scrollTop;
+  }
+
   destroyPagination();
   resultsEl.innerHTML = '';
 
@@ -892,6 +919,13 @@ function renderResults(items) {
 
   // 启动下滑分页，每批 10 个，不写死总数
   initPagination(items);
+
+  // 恢复该视图的滚动位置（等 DOM 布局完成）
+  if (saveKey && state.scrollPositions[saveKey]) {
+    requestAnimationFrame(() => {
+      resultsEl.scrollTop = state.scrollPositions[saveKey] || 0;
+    });
+  }
 }
 
 /** 创建单个游戏卡片 */
@@ -1136,6 +1170,12 @@ async function loadDetailPrices(appId, card) {
   const detailEl = card.querySelector(`#detail-${appId}`);
   if (!detailEl) return;
 
+  // 全局缓存命中
+  if (detailCache.has(appId)) {
+    detailEl.innerHTML = detailCache.get(appId);
+    return;
+  }
+
   // 平行加载：先获取汇率（如果尚未缓存），再获取所有币种价格
   await fetchExchangeRates();
 
@@ -1181,7 +1221,10 @@ async function loadDetailPrices(appId, card) {
     detailEl.innerHTML = tableHtml;
 
     // 加载史低数据（各币种）
-    loadDetailHistoryLows(appId, detailEl);
+    await loadDetailHistoryLows(appId, detailEl);
+
+    // 缓存完整详情 HTML（含史低），下次同一 appId 直接复用
+    detailCache.set(appId, detailEl.innerHTML);
   } catch {
     detailEl.innerHTML = `<span class="price-na">多币种价格加载失败</span>`;
   }
