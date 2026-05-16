@@ -154,8 +154,10 @@ const searchTabsEl = $('searchTabs');
 /** CORS 代理列表（Steam/CheapShark API 不支持浏览器跨域请求） */
 const CORS_PROXIES = [
   url => `https://corsproxy.org/?${encodeURIComponent(url)}`,
-  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.budd.ink/?${encodeURIComponent(url)}`,
 ];
 
 // ===== 网络请求工具 =====
@@ -456,7 +458,7 @@ async function fetchExchangeRates() {
  */
 async function fetchFeatured(cc, lang = 'en') {
   const url = `https://store.steampowered.com/api/featuredcategories?cc=${cc}&l=${lang}`;
-  const res = await proxyFetch(url);
+  const res = await proxyFetchWithRetry(url, {}, 1);
   if (!res.ok) throw new Error(`Steam 推荐接口失败 (${res.status})`);
   const data = await res.json();
   return data;
@@ -485,7 +487,7 @@ function normalizeFeaturedItem(item) {
 async function fetchSearchCategory(category, cc, lang, count = 50) {
   const filterParam = category === 'specials' ? 'specials=1' : `filter=${category}`;
   const url = `https://store.steampowered.com/search/results/?json=1&${filterParam}&cc=${cc}&l=${lang}&start=0&count=${count}`;
-  const res = await proxyFetch(url);
+  const res = await proxyFetchWithRetry(url, {}, 1);
   if (!res.ok) throw new Error(`Steam 搜索接口失败 (${res.status})`);
   const data = await res.json();
   return data.items || [];
