@@ -148,8 +148,9 @@ const searchTabsEl = $('searchTabs');
 
 /** CORS 代理列表（Steam/CheapShark API 不支持浏览器跨域请求） */
 const CORS_PROXIES = [
+  url => `https://corsproxy.org/?${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
   url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
 ];
 
 // ===== 网络请求工具 =====
