@@ -584,48 +584,65 @@ async function searchViaSteamSearchPage(query, maxResults = 20) {
 
 /**
  * 使用 Steam Search JSON 接口补充搜索结果
- * https://store.steampowered.com/search/results/?term=X&category1=998&start=0&count=25&json=1
- * 返回 JSON，带分页信息，比 HTML 解析稳定得多
+ * https://store.steampowered.com/search/results?term=X&category1=998&start=0&count=25&json=1
+ * 返回 items_html (HTML string) + total_count，需要从中提取游戏信息
+ * 与 storesearch 同域名（可靠），支持翻页
  */
 async function searchViaSteamSearchJson(query, maxResults = 20) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const matched = [];
+  const seenNames = new Set(); // 辅助去重（HTML 解析无 appid 时）
 
   try {
     for (let start = 0; start < 50 && matched.length < maxResults; start += 25) {
-      const url = `https://store.steampowered.com/search/results/?term=${encodeURIComponent(query)}&category1=998&start=${start}&count=25&json=1`;
+      const url = `https://store.steampowered.com/search/results?term=${encodeURIComponent(query)}&category1=998&start=${start}&count=25&json=1`;
       const res = await proxyFetchWithRetry(url);
       const data = await res.json();
 
-      if (!data.success || !data.items) break;
+      if (!data.success) break;
 
-      for (const item of data.items) {
-        if (matched.length >= maxResults) break;
-        const id = parseInt(item.id);
-        if (!id || isNaN(id)) continue;
-        const name = item.name || '';
-        if (!name.toLowerCase().includes(q)) continue;
+      // items_html 是 HTML 片段，包含 <a> 标签行
+      const html = data.items_html || '';
+      if (!html) break;
+
+      // 用正则解析 <a data-ds-appid="id">
+      const rowRegex = /<a[^>]*data-ds-appid="(\d+)"[^>]*>([\s\S]*?)<\/a>/gi;
+      let match;
+
+      while ((match = rowRegex.exec(html)) !== null && matched.length < maxResults) {
+        const appId = parseInt(match[1]);
+        if (!appId || isNaN(appId)) continue;
+
+        const block = match[2];
+
+        // 提取名称
+        const titleMatch = block.match(/<span class="title">([^<]*)<\/span>/i);
+        const name = titleMatch ? titleMatch[1].trim() : '';
+        if (!name || !name.toLowerCase().includes(q)) continue;
+        if (seenNames.has(name.toLowerCase())) continue;
+        seenNames.add(name.toLowerCase());
+
+        // 提取折扣图片链接（tiny_image）
+        const imgMatch = block.match(/<img[^>]+src="([^"]*)"[^>]*>/i);
+        const imgUrl = imgMatch ? imgMatch[1] : '';
 
         matched.push({
-          id,
+          id: appId,
           name,
-          tiny_image: item.tiny_image || `https://steamcdn-a.akamaihd.net/steam/apps/${id}/capsule_sm_120.jpg`,
-          header_image: item.header_image || item.tiny_image || '',
-          metacritic_score: item.metacritic_score || 0,
-          steam_rating_percent: item.steam_rating_percent || 0,
-          release_date: item.release_date || '',
-          price: item.price ? {
-            final: item.price.final,
-            initial: item.price.initial,
-            discount_percent: item.price.discount_percent || 0,
-          } : null,
-          _hasPrice: !!item.price,
+          tiny_image: `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/capsule_sm_120.jpg`,
+          header_image: imgUrl || `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
+          metacritic_score: 0,
+          steam_rating_percent: 0,
+          release_date: '',
+          price: null,
+          _hasPrice: false,
         });
       }
 
       // 没有更多页了
-      if (!data.items || data.items.length < 25) break;
+      const total = data.total_count || 0;
+      if (start + 25 >= total) break;
     }
   } catch (e) {
     console.warn('searchViaSteamSearchJson 失败:', e.message);
@@ -1178,6 +1195,9 @@ async function doSearch(query, force) {
     // 检查视图是否还存在
     const currentViewState = state.views[viewKey];
     if (!currentViewState) return; // 标签已被关闭
+
+    // 诊断：记录各阶段结果数量
+    console.log(`[Search] "${query}" total items: ${items.length}, unique: ${seenIds.size}`);
 
     currentViewState.items = items;
     currentViewState.rendered = 0;
