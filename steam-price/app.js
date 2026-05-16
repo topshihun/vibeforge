@@ -150,13 +150,6 @@ function renderCurrentView() {
   resultsEl.scrollTop = view.scrollTop;
 }
 
-// ===== 滚动位置实时保存 =====
-
-resultsEl.addEventListener('scroll', () => {
-  const view = currentView();
-  if (view) view.scrollTop = resultsEl.scrollTop;
-});
-
 // ===== 史低缓存 =====
 /** 内存缓存：getHistoricalLow 结果，1 小时后过期 */
 const priceLowCache = new Map();
@@ -183,6 +176,12 @@ const errorCard = $('errorCard');
 const errorMsg = $('errorMsg');
 const featuredTabsEl = $('featuredTabs');
 const searchTabsEl = $('searchTabs');
+
+// ===== 滚动位置实时保存 =====
+resultsEl.addEventListener('scroll', () => {
+  const view = currentView();
+  if (view) view.scrollTop = resultsEl.scrollTop;
+});
 
 // ===== 工具函数 =====
 
