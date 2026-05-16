@@ -1107,6 +1107,27 @@ function renderNextBatch() {
     }
     view._sentinel = null;
     view._observer = null;
+    return;
+  }
+
+  // 填满视口：哨兵仍在 rootMargin 范围内时继续加载下一批
+  // IntersectionObserver 只在交叉状态变化时触发，哨兵持续可见不会再次回调
+  if (view._sentinel) {
+    requestAnimationFrame(() => {
+      // 视图可能已切换，检查哨兵是否仍属于当前 view
+      const v = currentView();
+      if (!v || v !== view) return;
+      if (!view._sentinel || !view._sentinel.parentNode) return;
+
+      const sRect = view._sentinel.getBoundingClientRect();
+      const cRect = resultsEl.getBoundingClientRect();
+      const margin = 300; // 与 observer rootMargin 一致
+
+      // 如果哨兵距容器顶部的距离 < 容器可视高度 + rootMargin，说明仍在可见范围内
+      if (sRect.top - cRect.top < cRect.height + margin) {
+        renderNextBatch();
+      }
+    });
   }
 }
 
