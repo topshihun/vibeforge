@@ -569,12 +569,30 @@ function normalizeFeaturedItem(item) {
   };
 }
 
-/** 获取 Steam 分类搜索（topsellers / specials 等） */
-async function fetchSearchCategory(category, cc, lang, count = 50) {
-  const url = `https://store.steampowered.com/api/search/category?category=${category}&cc=${cc}&l=${lang}&count=${count}`;
-  const res = await proxyFetchWithRetry(url);
-  const data = await res.json();
-  return data.items || [];
+/** 获取 Steam 分类搜索（支持分页，自动累积获取更多条目） */
+async function fetchSearchCategory(category, cc, lang, maxItems = 200) {
+  const pageSize = 50;
+  let allItems = [];
+  let start = 0;
+  let totalCount = Infinity;
+
+  while (start < totalCount && allItems.length < maxItems) {
+    const url = `https://store.steampowered.com/api/search/category?category=${category}&cc=${cc}&l=${lang}&count=${pageSize}&start=${start}`;
+    try {
+      const res = await proxyFetchWithRetry(url);
+      const data = await res.json();
+      const items = data.items || [];
+      totalCount = data.total_count || items.length;
+      allItems = allItems.concat(items);
+      if (items.length < pageSize) break; // 最后一页
+      start += pageSize;
+    } catch (e) {
+      console.warn(`fetchSearchCategory(${category}) 第 ${start} 页失败:`, e.message);
+      break;
+    }
+  }
+
+  return allItems;
 }
 
 function normalizeSearchItem(item) {
@@ -636,8 +654,8 @@ async function loadFeatured(cc) {
       throw new Error('热门游戏接口全部失败');
     }
 
-    // 填充 top_sellers 视图
-    fillFeaturedView(VIEW_FEATURED_TOP, featuredData, topsellersExtra, 'top_sellers');
+    // 填充 top_sellers 视图（合并 new_releases + coming_soon 补充更多条目）
+    fillFeaturedView(VIEW_FEATURED_TOP, featuredData, topsellersExtra, 'top_sellers', ['new_releases', 'coming_soon']);
     // 填充 specials 视图
     fillFeaturedView(VIEW_FEATURED_SPECIALS, featuredData, specialsExtra, 'specials');
 
@@ -659,10 +677,22 @@ async function loadFeatured(cc) {
 }
 
 /** 填充一个 featured 视图的数据 */
-function fillFeaturedView(viewKey, featuredData, extraItems, category) {
+function fillFeaturedView(viewKey, featuredData, extraItems, category, extraCategories) {
   const view = state.views[viewKey];
 
+  // 从主分类收集
   const rawItems = (featuredData[category] && featuredData[category].items) || [];
+
+  // 从额外分类收集（如 new_releases、coming_soon）
+  if (extraCategories && extraCategories.length) {
+    for (const extraCat of extraCategories) {
+      const extraCatItems = (featuredData[extraCat] && featuredData[extraCat].items) || [];
+      for (const item of extraCatItems) {
+        rawItems.push(item);
+      }
+    }
+  }
+
   const extra = (extraItems || []).map(normalizeSearchItem).filter(Boolean);
 
   // 合并：先取 featuredcategories 的有价格条目，再追加无价格的搜索条目（去重）
