@@ -1,51 +1,67 @@
 <div align="center">
-  <h1>⚡ VibeForge</h1>
-  <p><em>创意工坊 — 纯前端小项目合集</em></p>
+
+<img src="https://capsule-render.vercel.app/api?type=waving&height=200&color=0:0e0c28,100:2d1b69&text=VibeForge&fontSize=60&fontAlignY=35&desc=创意工坊%20·%20小项目合集&descSize=16&descAlignY=55" width="100%">
+
+<p>
+  <img src="https://img.shields.io/badge/Bun-000?logo=bun&logoColor=fff&style=flat-square">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=fff&style=flat-square">
+  <img src="https://img.shields.io/badge/Vanilla-js-F7DF1E?logo=javascript&logoColor=000&style=flat-square">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square">
+</p>
+
 </div>
 
 ---
 
-## 📦 项目介绍
+## 项目
 
-VibeForge 是一个**前端小项目合集**，包含游戏和实用工具。使用 [Bun](https://bun.sh) 作为本地开发服务器，项目采用纯 HTML/CSS/JS 构建，无需前端框架。
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <b>🐍 贪吃蛇</b><br><sub>snake/</sub><br>双人对战 · 穿墙
+    </td>
+    <td align="center" width="25%">
+      <b>🧱 俄罗斯方块</b><br><sub>tetris/</sub><br>幽灵预览 · 加速
+    </td>
+    <td align="center" width="25%">
+      <b>🎯 坦克大战</b><br><sub>tank-war/</sub><br>多种墙体 · AI
+    </td>
+    <td align="center" width="25%">
+      <b>✈️ 飞机大战</b><br><sub>plane-war/</sub><br>雷霆出击 · 难度
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <b>📄 简历制作</b><br><sub>open-resume/</sub><br>在线编辑 · PDF
+    </td>
+    <td align="center">
+      <b>🔐 编解码器</b><br><sub>encode-decode/</sub><br>MD5/Base64/URL
+    </td>
+    <td align="center">
+      <b>💰 Steam 比价</b><br><sub>steam-price/</sub><br>多货币 · 史低
+    </td>
+    <td align="center">
+      <b>🧠 编译器实验室</b><br><sub>compiler-lab/</sub><br>C → 汇编
+    </td>
+  </tr>
+</table>
 
-### 🎮 项目列表
+---
 
-| 项目 | 图标 | 说明 |
-|------|------|------|
-| 🐍 贪吃蛇 | `snake/` | 经典贪吃蛇，支持双人对战、穿墙模式 |
-| 🧱 俄罗斯方块 | `tetris/` | 经典俄罗斯方块，幽灵预览、等级加速 |
-| 🎯 坦克大战 | `tank-war/` | 经典坦克大战，多种墙体、敌方 AI、逐块摧毁 |
-| ✈️ 飞机大战 | `plane-war/` | 雷霆出击，制霸长空，多种难度挑战 |
-| 📄 简历制作 | `open-resume/` | 在线简历编辑与导出工具 |
-| 🔐 编码与解码器 | `encode-decode/` | MD5、Base64、URL、SHA 等常用编解码工具 |
-| 💰 Steam 价格查询 | `steam-price/` | 多货币比价、史低追踪、多语言搜索 |
-| 🧠 编译器实验室 | `compiler-lab/` | 编写 C 代码，编译为多架构汇编代码 |
-
-## 🚀 快速开始
+## 开始
 
 ```bash
-# 安装 Bun（如未安装）
-# curl -fsSL https://bun.sh/install | bash
-
-# 安装依赖
 bun install
-
-# 启动开发服务器（端口 8080）
-bun run dev
+bun run dev    # http://localhost:8080
+bun run build  # → dist/
 ```
 
-访问 `http://localhost:8080` 即可浏览所有项目。
+支持 Cloudflare Pages 部署
 
-## 🏗️ 构建部署
+---
 
-```bash
-# 构建静态文件到 dist/ 目录
-bun run build
-```
+<div align="center">
 
-构建产物可直接部署到任何静态托管平台（推荐 Cloudflare Pages）。
+[MIT](./LICENSE) · VibeForge · ❤️
 
-## 📄 许可证
-
-MIT
+</div>
