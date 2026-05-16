@@ -374,8 +374,8 @@ async function getHistoricalLow(steamAppId) {
       if (!gameRes.ok) throw new Error(`Game API HTTP ${gameRes.status}`);
       const gameData = await gameRes.json();
 
-      // 游戏不在 CheapShark 数据库 → 真·无史低，不重试
-      if (!Array.isArray(gameData) || gameData.length === 0) return null;
+      // API 返回空数组，可能临时故障或不在数据库 → 先重试，全部失败后显示"查询失败"
+      if (!Array.isArray(gameData) || gameData.length === 0) throw new Error('Game data empty');
 
       const entry = gameData[0];
       const dealId = entry.cheapestDealID;
