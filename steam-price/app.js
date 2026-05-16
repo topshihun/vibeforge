@@ -562,13 +562,6 @@ async function searchViaSteamSearchPage(query, maxResults = 20) {
 
         if (!name || !name.toLowerCase().includes(q)) continue;
 
-        // 提取价格信息
-        let price = null;
-        const discountMatch = block.match(/data-price-final="(\d+)"/i);
-        if (discountMatch) {
-          price = parseInt(discountMatch[1]) / 100;
-        }
-
         matched.push({
           id: appId,
           name,
@@ -577,13 +570,65 @@ async function searchViaSteamSearchPage(query, maxResults = 20) {
           metacritic_score: 0,
           steam_rating_percent: 0,
           release_date: '',
-          price: price ? { final: price * 100, initial: price * 100, discount_percent: 0 } : null,
-          _hasPrice: !!price,
+          price: null,
+          _hasPrice: false,
         });
       }
     }
   } catch (e) {
     console.warn('searchViaSteamSearchPage 解析失败（不影响主结果）:', e.message);
+  }
+
+  return matched;
+}
+
+/**
+ * 使用 Steam Search JSON 接口补充搜索结果
+ * https://store.steampowered.com/search/results/?term=X&category1=998&start=0&count=25&json=1
+ * 返回 JSON，带分页信息，比 HTML 解析稳定得多
+ */
+async function searchViaSteamSearchJson(query, maxResults = 20) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const matched = [];
+
+  try {
+    for (let start = 0; start < 50 && matched.length < maxResults; start += 25) {
+      const url = `https://store.steampowered.com/search/results/?term=${encodeURIComponent(query)}&category1=998&start=${start}&count=25&json=1`;
+      const res = await proxyFetchWithRetry(url);
+      const data = await res.json();
+
+      if (!data.success || !data.items) break;
+
+      for (const item of data.items) {
+        if (matched.length >= maxResults) break;
+        const id = parseInt(item.id);
+        if (!id || isNaN(id)) continue;
+        const name = item.name || '';
+        if (!name.toLowerCase().includes(q)) continue;
+
+        matched.push({
+          id,
+          name,
+          tiny_image: item.tiny_image || `https://steamcdn-a.akamaihd.net/steam/apps/${id}/capsule_sm_120.jpg`,
+          header_image: item.header_image || item.tiny_image || '',
+          metacritic_score: item.metacritic_score || 0,
+          steam_rating_percent: item.steam_rating_percent || 0,
+          release_date: item.release_date || '',
+          price: item.price ? {
+            final: item.price.final,
+            initial: item.price.initial,
+            discount_percent: item.price.discount_percent || 0,
+          } : null,
+          _hasPrice: !!item.price,
+        });
+      }
+
+      // 没有更多页了
+      if (!data.items || data.items.length < 25) break;
+    }
+  } catch (e) {
+    console.warn('searchViaSteamSearchJson 失败:', e.message);
   }
 
   return matched;
@@ -1112,6 +1157,17 @@ async function doSearch(query, force) {
     if (items.length < 30) {
       const appListItems = await searchViaAppList(query);
       for (const item of appListItems) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          items.push(item);
+        }
+      }
+    }
+
+    // 再补充 Steam Search JSON 接口结果（最可靠，与 storesearch 同域名）
+    if (items.length < 40) {
+      const jsonItems = await searchViaSteamSearchJson(query);
+      for (const item of jsonItems) {
         if (!seenIds.has(item.id)) {
           seenIds.add(item.id);
           items.push(item);
