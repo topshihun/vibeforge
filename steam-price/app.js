@@ -545,7 +545,8 @@ function setupFeaturedTabs() {
     if (!tab) return;
 
     const category = tab.dataset.category;
-    if (category === state.featured.tab) return;
+    // 仅在已处于首页视图时跳过重复点击；搜索切回首页必须允许
+    if (state.view === 'featured' && category === state.featured.tab) return;
 
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
