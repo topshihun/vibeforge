@@ -1099,17 +1099,50 @@ function escapeHtml(str) {
 
 // ===== 事件绑定 =====
 
-/** 设置货币下拉选择框 */
-function setupCurrencySelect() {
-  if (!currencySelect) return;
-  currencySelect.innerHTML = CC_CURRENCIES.map(c =>
-    `<option value="${c.cc}" ${c.cc === state.cc ? 'selected' : ''}>${c.flag} ${c.code}</option>`
-  ).join('');
+/** 通用自定义下拉框：点击外部关闭 */
+document.addEventListener('click', (e) => {
+  const openSelect = document.querySelector('.custom-select.open');
+  if (!openSelect) return;
+  if (!openSelect.contains(e.target)) {
+    openSelect.classList.remove('open');
+  }
+});
 
-  currencySelect.addEventListener('change', () => {
-    const cc = currencySelect.value;
-    if (cc === state.cc) return;
+/** 设置货币下拉选择框（自定义） */
+function setupCurrencySelect() {
+  const trigger = document.getElementById('currencySelectTrigger');
+  const menu = document.getElementById('currencySelectMenu');
+  if (!trigger || !menu) return;
+
+  const container = trigger.closest('.custom-select');
+
+  function renderOptions() {
+    menu.innerHTML = CC_CURRENCIES.map(c =>
+      `<button class="custom-select-option ${c.cc === state.cc ? 'selected' : ''}" data-value="${c.cc}">${c.flag} ${c.code} · ${c.name}</button>`
+    ).join('');
+    trigger.textContent = `${CC_CURRENCIES.find(c => c.cc === state.cc).flag} ${state.cc.toUpperCase()}`;
+  }
+
+  renderOptions();
+
+  // 点击触发按钮切换下拉
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    container.classList.toggle('open');
+  });
+
+  // 点击选项
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('.custom-select-option');
+    if (!btn) return;
+    const cc = btn.dataset.value;
+    if (cc === state.cc) {
+      container.classList.remove('open');
+      return;
+    }
     state.cc = cc;
+    renderOptions();
+    container.classList.remove('open');
     if (state.view === 'featured') {
       loadFeatured(cc);
     } else {
@@ -1122,26 +1155,47 @@ function setupCurrencySelect() {
   });
 }
 
-/** 设置语言下拉选择框 */
+/** 设置语言下拉选择框（自定义） */
 function setupLangSelect() {
-  if (!langSelect) return;
-  langSelect.innerHTML = LANGUAGES.map(l =>
-    `<option value="${l.code}" ${l.code === state.lang ? 'selected' : ''}>${l.flag} ${l.native}</option>`
-  ).join('');
+  const trigger = document.getElementById('langSelectTrigger');
+  const menu = document.getElementById('langSelectMenu');
+  if (!trigger || !menu) return;
 
-  langSelect.addEventListener('change', () => {
-    const lang = langSelect.value;
-    if (lang === state.lang) return;
+  const container = trigger.closest('.custom-select');
+
+  function renderOptions() {
+    menu.innerHTML = LANGUAGES.map(l =>
+      `<button class="custom-select-option ${l.code === state.lang ? 'selected' : ''}" data-value="${l.code}">${l.flag} ${l.native} (${l.label})</button>`
+    ).join('');
+    const cur = LANGUAGES.find(l => l.code === state.lang);
+    trigger.textContent = cur ? `${cur.flag} ${cur.native}` : state.lang;
+  }
+
+  renderOptions();
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    container.classList.toggle('open');
+  });
+
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('.custom-select-option');
+    if (!btn) return;
+    const lang = btn.dataset.value;
+    if (lang === state.lang) {
+      container.classList.remove('open');
+      return;
+    }
     state.lang = lang;
+    renderOptions();
+    container.classList.remove('open');
     if (state.view === 'featured') {
       loadFeatured(state.cc);
     } else if (state.view === 'search_tab' && state.activeTabId) {
       const activeTab = state.searchTabs.find(t => t.id === state.activeTabId);
-      if (activeTab) {
-        searchInput.value = activeTab.query;
-        // 关闭旧标签，以新语言重新搜索
-        closeSearchTab(state.activeTabId);
-        doSearch();
+      if (activeTab && activeTab.results) {
+        // 重新搜索当前激活标签
+        doSearch(activeTab.query, true);
       }
     }
   });

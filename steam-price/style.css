@@ -132,6 +132,8 @@ body::before {
   transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
   appearance: none;
   -webkit-appearance: none;
+  /* 强制浏览器用暗色模式渲染原生弹出菜单，避免闪白 */
+  color-scheme: dark;
 }
 .sidebar-select:hover {
   border-color: rgba(130, 87, 229, 0.4);
@@ -145,6 +147,107 @@ body::before {
   background: #1a1a2e;
   color: #e0e0e0;
   padding: 6px;
+}
+
+/* === 自定义下拉框（替代原生 <select>，消除闪白） === */
+.custom-select {
+  position: relative;
+  width: 100%;
+  font-size: 0.8em;
+  color: #e0e0e0;
+  font-family: inherit;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  padding: 8px 32px 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 87, 229, 0.15);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238257e5' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")
+      no-repeat right 10px center,
+    rgba(10, 10, 26, 0.8);
+  color: #e0e0e0;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  text-align: left;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-select-trigger:hover {
+  border-color: rgba(130, 87, 229, 0.4);
+  background-color: rgba(20, 20, 45, 0.9);
+}
+
+.custom-select.open .custom-select-trigger {
+  border-color: rgba(130, 87, 229, 0.6);
+  box-shadow: 0 0 0 2px rgba(130, 87, 229, 0.1);
+}
+
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #1a1a2e;
+  border: 1px solid rgba(130, 87, 229, 0.2);
+  border-radius: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateY(-6px) scaleY(0.96);
+  transform-origin: top center;
+  pointer-events: none;
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+.custom-select.open .custom-select-menu {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  pointer-events: auto;
+}
+
+.custom-select-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #c0c0c0;
+  font-size: 0.85em;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.custom-select-option:hover {
+  background: rgba(130, 87, 229, 0.12);
+  color: #e0e0e0;
+}
+
+.custom-select-option.selected {
+  color: #a78bfa;
+  background: rgba(130, 87, 229, 0.08);
+  font-weight: 600;
+}
+
+.custom-select-menu::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-select-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-select-menu::-webkit-scrollbar-thumb {
+  background: rgba(130, 87, 229, 0.3);
+  border-radius: 3px;
 }
 
 /* === 推荐游戏标签（竖排） === */
