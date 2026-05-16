@@ -467,6 +467,70 @@ async function searchSteamStoreFull(query, lang = 'en') {
   }));
 }
 
+/** 从 Steam 全游戏列表本地匹配搜索（缓存到 localStorage，24h 有效） */
+const CACHE_APP_LIST = 'app_list_cache';
+let _appListInMemory = null; // 内存缓存，避免反复解析 4MB JSON
+
+async function searchViaAppList(query, maxResults = 20) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  let apps = _appListInMemory;
+  if (!apps) {
+    const cached = (() => {
+      try {
+        const raw = localStorage.getItem(CACHE_APP_LIST);
+        if (!raw) return null;
+        const { data, ts } = JSON.parse(raw);
+        if (Date.now() - ts < 86400000) return data;
+      } catch (e) { /* 缓存损坏，忽略 */ }
+      return null;
+    })();
+
+    if (cached) {
+      apps = _appListInMemory = cached;
+    } else {
+      try {
+        // 全游戏列表 ~4MB → 超时放宽到 20s
+        const url = 'https://api.steampowered.com/ISteamApps/GetAppList/v2/';
+        const res = await proxyFetchWithRetry(url, {}, 3);
+        const json = await res.json();
+        apps = json.applist?.apps || [];
+        _appListInMemory = apps;
+        try {
+          localStorage.setItem(CACHE_APP_LIST, JSON.stringify({ data: apps, ts: Date.now() }));
+        } catch (e) {
+          console.warn('AppList 缓存写入失败（超出配额）:', e.message);
+        }
+      } catch (e) {
+        console.warn('searchViaAppList 获取失败（不影响主结果）:', e.message);
+        return [];
+      }
+    }
+  }
+
+  const matched = [];
+  for (const app of apps) {
+    if (!app.name || !app.appid) continue;
+    if (app.name.toLowerCase().includes(q)) {
+      matched.push({
+        id: app.appid,
+        name: app.name,
+        tiny_image: `https://steamcdn-a.akamaihd.net/steam/apps/${app.appid}/capsule_sm_120.jpg`,
+        header_image: `https://steamcdn-a.akamaihd.net/steam/apps/${app.appid}/header.jpg`,
+        metacritic_score: 0,
+        steam_rating_percent: 0,
+        release_date: '',
+        price: null,
+        _hasPrice: false,
+      });
+      if (matched.length >= maxResults) break;
+    }
+  }
+
+  return matched;
+}
+
 /** 获取游戏名称（多语言） */
 async function fetchGameName(appId, lang) {
   const cacheKey = `${appId}_${lang}`;
@@ -979,6 +1043,17 @@ async function doSearch(query, force) {
     if (items.length < 10 && state.lang !== 'schinese') {
       const chineseItems = await searchSteamStoreFull(query, 'schinese');
       for (const item of chineseItems) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          items.push(item);
+        }
+      }
+    }
+
+    // 补充 Steam 全游戏列表本地匹配结果（不同数据源，可命中 storesearch 遗漏的游戏）
+    if (items.length < 30) {
+      const appListItems = await searchViaAppList(query);
+      for (const item of appListItems) {
         if (!seenIds.has(item.id)) {
           seenIds.add(item.id);
           items.push(item);
