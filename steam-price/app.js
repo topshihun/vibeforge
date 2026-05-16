@@ -1016,7 +1016,7 @@ async function loadPriceForCard(appId, card, cc) {
   }
 }
 
-/** 史低价格查询 */
+/** 史低价格查询（主卡片） */
 async function loadHistoryLow(appId, card) {
   const historyEl = card.querySelector(`#history-${appId}`);
   if (!historyEl) return;
@@ -1028,31 +1028,21 @@ async function loadHistoryLow(appId, card) {
       return;
     }
 
-    const ccInfo = CC_CURRENCIES.find(c => c.cc === state.cc);
-    const currencyCode = ccInfo?.code || 'USD';
-    const symbol = getCurrencySymbol(currencyCode);
+    // CheapShark API 仅返回 USD 史低，不进行汇率换算
+    if (state.cc !== 'us') {
+      historyEl.innerHTML = `<span class="price-na">N/A</span>`;
+      return;
+    }
 
-    const localPrice = formatUsdToLocal(data.lowestUsd, currencyCode);
     const isCurrentLow = data.currentUsd !== null && data.lowestUsd >= data.currentUsd - 0.01;
 
-    let html = '';
-    if (localPrice !== null) {
-      html = `
-        <span class="historical-low">
-          <span class="label">📉 史低:</span>
-          <span class="lowest-ever">${symbol}${localPrice}</span>
-          ${data.lowestDate ? `<span class="price-na" style="font-size:0.8em;">(${formatDate(data.lowestDate)})</span>` : ''}
-          ${isCurrentLow ? `<span class="match-current">🔥 当前史低</span>` : ''}
-        </span>`;
-    } else {
-      html = `
-        <span class="historical-low">
-          <span class="label">📉 史低 (USD):</span>
-          <span class="lowest-ever">$${data.lowestUsd.toFixed(2)}</span>
-          ${data.lowestDate ? `<span class="price-na" style="font-size:0.8em;">(${formatDate(data.lowestDate)})</span>` : ''}
-          ${isCurrentLow ? `<span class="match-current">🔥 当前史低</span>` : ''}
-        </span>`;
-    }
+    let html = `
+      <span class="historical-low">
+        <span class="label">📉 史低:</span>
+        <span class="lowest-ever">$${data.lowestUsd.toFixed(2)}</span>
+        ${data.lowestDate ? `<span class="price-na" style="font-size:0.8em;">(${formatDate(data.lowestDate)})</span>` : ''}
+        ${isCurrentLow ? `<span class="match-current">🔥 当前史低</span>` : ''}
+      </span>`;
     historyEl.innerHTML = html;
   } catch {
     const el = card.querySelector(`#history-${appId}`);
@@ -1119,7 +1109,7 @@ async function loadDetailPrices(appId, card) {
   }
 }
 
-/** 详情中的史低价格（各币种独立换算） */
+/** 详情中的史低价格（仅 USD 有数据，其他币种显示 N/A） */
 async function loadDetailHistoryLows(appId, detailEl) {
   try {
     const data = await getHistoricalLow(appId);
@@ -1130,21 +1120,17 @@ async function loadDetailHistoryLows(appId, detailEl) {
       });
       return;
     }
-    const lowestUsd = data.lowestUsd;
 
-    // 为每个币种显示换算后的史低
+    // CheapShark API 仅返回 USD 史低，不进行汇率换算
     CC_CURRENCIES.forEach(ccInfo => {
       const cell = detailEl.querySelector(`#detail-low-${appId}-${ccInfo.cc}`);
       if (!cell) return;
 
-      const localPrice = formatUsdToLocal(lowestUsd, ccInfo.code);
-      if (localPrice !== null) {
-        const symbol = getCurrencySymbol(ccInfo.code);
-        cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">${symbol}${localPrice}</span>`;
+      if (ccInfo.cc === 'us') {
+        cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">$${data.lowestUsd.toFixed(2)}</span>`;
         cell.className = 'curr-low';
       } else {
-        cell.innerHTML = `<span style="color:#fbbf24;font-weight:600;">$${lowestUsd.toFixed(2)}</span>`;
-        cell.className = 'curr-low';
+        cell.textContent = 'N/A';
       }
     });
   } catch {
