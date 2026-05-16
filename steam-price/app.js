@@ -545,7 +545,18 @@ function setupFeaturedTabs() {
     if (!tab) return;
 
     const category = tab.dataset.category;
-    // 仅在已处于首页视图时跳过重复点击；搜索切回首页必须允许
+
+    // === 搜索结果标签 ===
+    if (category === 'search_results') {
+      if (state.view === 'search') return; // 已在搜索视图
+      featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      state.view = 'search';
+      renderResults(state.search.results || []);
+      return;
+    }
+
+    // === 推荐标签（热门游戏 / 打折游戏） ===
     if (state.view === 'featured' && category === state.featured.tab) return;
 
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
@@ -584,26 +595,31 @@ async function doSearch() {
     if (items.length === 0) {
       // 降级：使用完整搜索接口（支持标签/描述匹配，搜中文关键词更准确）
       const fullItems = await searchSteamStoreFull(query, state.lang);
-      if (fullItems.length === 0) {
-        state.search.loading = false;
-        state.search.results = [];
-        resultsEl.innerHTML = `
-          <div class="no-results">
-            <div class="icon">🔍</div>
-            <div class="text">没有找到 "${escapeHtml(query)}" 相关游戏<br><span style="color:#444;font-size:0.85em;">当前搜索语言：${getLangNative(state.lang)}，可尝试切换语言重新搜索</span></div>
-          </div>`;
-        return;
+      if (fullItems.length > 0) {
+        items.push(...fullItems);
       }
-      // 用完整搜索结果继续
-      items.push(...fullItems);
     }
 
-      // 视图守卫：如果用户中途切换到了推荐，放弃渲染
-      if (state.view !== 'search') return;
+    // 视图守卫：如果用户中途切换到了推荐，放弃渲染
+    if (state.view !== 'search') return;
 
-      state.search.results = items;
+    // 保存结果并激活"搜索结果"标签
     state.search.loading = false;
-    renderResults(items);
+    state.search.results = items;
+    const searchTab = document.getElementById('searchResultTab');
+    searchTab.style.display = '';
+    featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+    searchTab.classList.add('active');
+
+    if (items.length === 0) {
+      resultsEl.innerHTML = `
+        <div class="no-results">
+          <div class="icon">🔍</div>
+          <div class="text">没有找到 "${escapeHtml(query)}" 相关游戏<br><span style="color:#444;font-size:0.85em;">当前搜索语言：${getLangNative(state.lang)}，可尝试切换语言重新搜索</span></div>
+        </div>`;
+    } else {
+      renderResults(items);
+    }
   } catch (err) {
     state.search.loading = false;
     state.search.error = err.message;
