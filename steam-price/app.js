@@ -399,22 +399,53 @@ function renderInlineError(container, message) {
 
 // ===== Steam API 接口 =====
 
-/** 搜索 Steam 商店 */
+/** 搜索 Steam 商店（多地区聚合获取更多结果） */
 async function searchSteamGames(query, lang = 'en') {
-  const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=us&l=${lang}`;
-  const res = await proxyFetchWithRetry(url);
-  const data = await res.json();
-  return (data.items || []).map(item => ({
-    id: item.id,
-    name: item.name || '未知游戏',
-    tiny_image: item.tiny_image || '',
-    header_image: item.header_image || '',
-    metacritic_score: item.metacritic_score || 0,
-    steam_rating_percent: item.steam_rating_percent || 0,
-    release_date: item.release_date || '',
-    price: null,
-    _hasPrice: false,
-  }));
+  const seen = new Set();
+  const items = [];
+
+  const trySearch = async (cc, l) => {
+    const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&cc=${cc}&l=${l}`;
+    const res = await proxyFetchWithRetry(url);
+    const data = await res.json();
+    return (data.items || []).map(item => ({
+      id: item.id,
+      name: item.name || '未知游戏',
+      tiny_image: item.tiny_image || '',
+      header_image: item.header_image || '',
+      metacritic_score: item.metacritic_score || 0,
+      steam_rating_percent: item.steam_rating_percent || 0,
+      release_date: item.release_date || '',
+      price: null,
+      _hasPrice: false,
+    }));
+  };
+
+  // 主地区搜索
+  try {
+    const primary = await trySearch('us', lang);
+    for (const item of primary) {
+      if (!seen.has(item.id)) { seen.add(item.id); items.push(item); }
+    }
+  } catch (e) {
+    console.warn('searchSteamGames(us) 失败:', e.message);
+  }
+
+  // 如果主地区返回太少，尝试其他地区补充
+  if (items.length < 15) {
+    const extraCCs = [['jp', 'en'], ['de', 'en'], ['gb', 'en']];
+    const results = await Promise.allSettled(
+      extraCCs.map(([cc, l]) => trySearch(cc, l))
+    );
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      for (const item of result.value) {
+        if (!seen.has(item.id)) { seen.add(item.id); items.push(item); }
+      }
+    }
+  }
+
+  return items;
 }
 
 /** 使用完整搜索接口（支持按标签/描述匹配，降级用） */
@@ -554,6 +585,43 @@ async function fetchFeatured(cc, lang = 'en') {
   return await res.json();
 }
 
+/**
+ * 多地区合并获取 featured 数据
+ * 每个地区 Steam 推荐的前 10 名不同，合并 ≈ 每分类 30~40 条
+ */
+const FEATURED_REGIONS = [
+  ['us', 'en'],  ['jp', 'en'],
+  ['de', 'en'],  ['gb', 'en'],
+];
+
+async function fetchFeaturedMulti(primaryCC, primaryLang) {
+  const regions = [[primaryCC, primaryLang], ...FEATURED_REGIONS.filter(([c]) => c !== primaryCC)];
+  const main = await fetchFeatured(regions[0][0], regions[0][1]);
+  if (!main) return null;
+
+  const extras = await Promise.allSettled(
+    regions.slice(1).map(([cc, lang]) =>
+      fetchFeatured(cc, lang).catch(() => null)
+    )
+  );
+
+  for (const result of extras) {
+    if (result.status !== 'fulfilled' || !result.value) continue;
+    const data = result.value;
+    for (const [cat, catData] of Object.entries(data)) {
+      if (!catData || !catData.items) continue;
+      if (main[cat]) {
+        // 合并 items（去重由下游 fillFeaturedView 的 seen Set 完成）
+        main[cat].items = (main[cat].items || []).concat(catData.items);
+      } else {
+        main[cat] = catData;
+      }
+    }
+  }
+
+  return main;
+}
+
 function normalizeFeaturedItem(item) {
   if (!item || !item.id) return null;
   return {
@@ -569,30 +637,12 @@ function normalizeFeaturedItem(item) {
   };
 }
 
-/** 获取 Steam 分类搜索（支持分页，自动累积获取更多条目） */
-async function fetchSearchCategory(category, cc, lang, maxItems = 200) {
-  const pageSize = 50;
-  let allItems = [];
-  let start = 0;
-  let totalCount = Infinity;
-
-  while (start < totalCount && allItems.length < maxItems) {
-    const url = `https://store.steampowered.com/api/search/category?category=${category}&cc=${cc}&l=${lang}&count=${pageSize}&start=${start}`;
-    try {
-      const res = await proxyFetchWithRetry(url);
-      const data = await res.json();
-      const items = data.items || [];
-      totalCount = data.total_count || items.length;
-      allItems = allItems.concat(items);
-      if (items.length < pageSize) break; // 最后一页
-      start += pageSize;
-    } catch (e) {
-      console.warn(`fetchSearchCategory(${category}) 第 ${start} 页失败:`, e.message);
-      break;
-    }
-  }
-
-  return allItems;
+/** 获取 Steam 分类搜索（接口常被 CORS 代理拦截，仅作额外补充） */
+async function fetchSearchCategory(category, cc, lang, count = 50) {
+  const url = `https://store.steampowered.com/api/search/category?category=${category}&cc=${cc}&l=${lang}&count=${count}`;
+  const res = await proxyFetchWithRetry(url);
+  const data = await res.json();
+  return data.items || [];
 }
 
 function normalizeSearchItem(item) {
@@ -632,12 +682,19 @@ async function loadFeatured(cc) {
   try {
     let featuredData, topsellersExtra, specialsExtra;
 
+    // 多地区聚合获取丰富数据（~40 条/分类）
     try {
-      featuredData = await fetchFeatured(cc, state.lang);
+      featuredData = await fetchFeaturedMulti(cc, state.lang);
     } catch (e) {
-      console.warn('fetchFeatured 失败:', e.message);
+      console.warn('fetchFeaturedMulti 失败，降级单地区:', e.message);
+      try {
+        featuredData = await fetchFeatured(cc, state.lang);
+      } catch (e2) {
+        console.warn('fetchFeatured 也失败:', e2.message);
+      }
     }
 
+    // 仍尝试 fetchSearchCategory 作为额外补充（可能失败，但不影响主体数据）
     try {
       topsellersExtra = await fetchSearchCategory('topsellers', cc, state.lang);
     } catch (e) {
@@ -656,8 +713,8 @@ async function loadFeatured(cc) {
 
     // 填充 top_sellers 视图（合并 new_releases + coming_soon 补充更多条目）
     fillFeaturedView(VIEW_FEATURED_TOP, featuredData, topsellersExtra, 'top_sellers', ['new_releases', 'coming_soon']);
-    // 填充 specials 视图
-    fillFeaturedView(VIEW_FEATURED_SPECIALS, featuredData, specialsExtra, 'specials');
+    // 填充 specials 视图：收集所有分类中有折扣的条目
+    fillFeaturedView(VIEW_FEATURED_SPECIALS, featuredData, specialsExtra, 'specials', null, true);
 
     // 如果当前是 featured，重新渲染当前视图
     if (state.activeView && state.activeView.startsWith('featured:')) {
@@ -677,7 +734,7 @@ async function loadFeatured(cc) {
 }
 
 /** 填充一个 featured 视图的数据 */
-function fillFeaturedView(viewKey, featuredData, extraItems, category, extraCategories) {
+function fillFeaturedView(viewKey, featuredData, extraItems, category, extraCategories, collectDiscountedFromAll) {
   const view = state.views[viewKey];
 
   // 从主分类收集
@@ -689,6 +746,24 @@ function fillFeaturedView(viewKey, featuredData, extraItems, category, extraCate
       const extraCatItems = (featuredData[extraCat] && featuredData[extraCat].items) || [];
       for (const item of extraCatItems) {
         rawItems.push(item);
+      }
+    }
+  }
+
+  // 打折视图：从所有分类中收集有折扣的条目
+  if (collectDiscountedFromAll) {
+    const seenIds = new Set(rawItems.map(i => i.id));
+    for (const [cat, catData] of Object.entries(featuredData)) {
+      if (!catData || !catData.items) continue;
+      if (cat === category) continue; // 主分类已包含
+      if (extraCategories && extraCategories.includes(cat)) continue; // 额外分类已包含
+      for (const item of catData.items) {
+        if (!item || !item.id) continue;
+        if (seenIds.has(item.id)) continue;
+        if (item.price && item.price.discount_percent > 0) {
+          seenIds.add(item.id);
+          rawItems.push(item);
+        }
       }
     }
   }
