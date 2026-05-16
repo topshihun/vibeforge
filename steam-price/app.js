@@ -965,19 +965,24 @@ async function doSearch(query, force) {
   try {
     const items = await searchSteamGames(query, state.lang);
 
-    if (items.length === 0) {
-      // 降级：使用完整搜索接口（支持标签/描述匹配，搜中文关键词更准确）
-      const fullItems = await searchSteamStoreFull(query, state.lang);
-      if (fullItems.length > 0) {
-        items.push(...fullItems);
+    // 补充 Suggest API 结果（不同数据源，可返回更多/不同的游戏）
+    const seenIds = new Set(items.map(i => i.id));
+    const fullItems = await searchSteamStoreFull(query, state.lang);
+    for (const item of fullItems) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        items.push(item);
       }
     }
 
-    // 仍然没结果时，尝试用中文搜索（方便中文名搜索）
-    if (items.length === 0 && state.lang !== 'schinese') {
+    // 如果结果仍然太少，尝试中文搜索（方便中文名搜索）
+    if (items.length < 10 && state.lang !== 'schinese') {
       const chineseItems = await searchSteamStoreFull(query, 'schinese');
-      if (chineseItems.length > 0) {
-        items.push(...chineseItems);
+      for (const item of chineseItems) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          items.push(item);
+        }
       }
     }
 
