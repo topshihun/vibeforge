@@ -111,6 +111,7 @@ const state = {
   lang: detectDefaultLang(),
   featured: {
     data: null,           // 原始 API 数据
+    searchExtra: null,    // 从搜索页额外获取的游戏列表 { topsellers: [], specials: [] }
     tab: 'top_sellers',   // 'top_sellers' | 'specials'
     loading: false,
     error: null,
@@ -429,6 +430,34 @@ function normalizeFeaturedItem(item) {
   };
 }
 
+/** 从 Steam 搜索页获取指定类别的游戏列表（JSON API，最多 count 条） */
+async function fetchSearchCategory(category, cc, lang, count = 50) {
+  const filterParam = category === 'specials' ? 'specials=1' : `filter=${category}`;
+  const url = `https://store.steampowered.com/search/results/?json=1&${filterParam}&cc=${cc}&l=${lang}&start=0&count=${count}`;
+  const res = await proxyFetch(url);
+  if (!res.ok) throw new Error(`Steam 搜索接口失败 (${res.status})`);
+  const data = await res.json();
+  return data.items || [];
+}
+
+/** 标准化搜索结果（无价格信息，通过 loadPriceForCard 异步查询） */
+function normalizeSearchItem(item) {
+  const match = item.logo?.match(/\/apps\/(\d+)\//);
+  const id = match ? parseInt(match[1], 10) : 0;
+  if (!id) return null;
+  return {
+    id,
+    name: item.name || '',
+    tiny_image: null,
+    header_image: item.logo?.replace(/capsule_sm_120\.(jpg|png)/, 'capsule_231x87.$1') || '',
+    metacritic_score: null,
+    steam_rating_percent: null,
+    release_date: null,
+    price: null,
+    _hasPrice: false,
+  };
+}
+
 /** 加载推荐游戏（异步，独立状态管理） */
 async function loadFeatured(cc) {
   cc = cc || state.cc;
@@ -443,13 +472,21 @@ async function loadFeatured(cc) {
   renderInlineLoading(resultsEl);
 
   try {
-    // 获取推荐数据（汇率延后加载）
-    const featuredData = await fetchFeatured(cc, state.lang);
+    // 并行获取推荐数据和搜索结果（各 50 条）
+    const [featuredData, topsellersExtra, specialsExtra] = await Promise.all([
+      fetchFeatured(cc, state.lang),
+      fetchSearchCategory('topsellers', cc, state.lang),
+      fetchSearchCategory('specials', cc, state.lang),
+    ]);
 
     // 视图守卫：如果用户中途切换到了搜索，放弃渲染
     if (state.view !== 'featured') return;
 
     state.featured.data = featuredData;
+    state.featured.searchExtra = {
+      topsellers: (topsellersExtra || []).map(normalizeSearchItem).filter(Boolean),
+      specials: (specialsExtra || []).map(normalizeSearchItem).filter(Boolean),
+    };
     state.featured.loading = false;
     renderFeatured(state.featured.tab);
   } catch (err) {
@@ -475,7 +512,9 @@ function renderFeatured(category) {
   }
 
   const rawItems = data[category].items || [];
-  if (rawItems.length === 0) {
+  const extraItems = state.featured.searchExtra?.[category] || [];
+
+  if (rawItems.length === 0 && extraItems.length === 0) {
     destroyPagination();
     resultsEl.innerHTML = `
       <div class="no-results">
@@ -485,8 +524,17 @@ function renderFeatured(category) {
     return;
   }
 
+  // 合并：先取 featuredcategories 的有价格条目，再追加无价格的搜索条目（去重）
   const normalized = rawItems.map(normalizeFeaturedItem);
-  state.search.results = normalized; // 共享给搜索缓存（用于货币切换）
+  const seen = new Set(normalized.map(i => i.id));
+  for (const extra of extraItems) {
+    if (!seen.has(extra.id)) {
+      seen.add(extra.id);
+      normalized.push(extra);
+    }
+  }
+
+  state.search.results = normalized;
   renderResults(normalized);
 }
 
