@@ -411,7 +411,11 @@ async function getHistoricalLow(steamAppId) {
       }
       return null;
     } catch (err) {
-      if (attempt >= 2) throw err; // 网络/代理错误 → 让调用方显示"查询失败"
+      if (attempt >= 2) {
+        // 重试耗尽：API 返回空 → 真的没有史低数据；网络/代理错误 → 查询失败
+        if (err.message === 'Game data empty') return null;
+        throw err;
+      }
       await new Promise(r => setTimeout(r, 2000)); // 等待 2s 后重试整个流程
     }
   }
