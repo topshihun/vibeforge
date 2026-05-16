@@ -106,19 +106,16 @@ function getLangNative(code) {
 
 // ===== 状态管理 =====
 const state = {
-  view: 'featured',       // 'featured' | 'search'
+  view: 'featured',       // 'featured' | 'search_tab'
+  activeTabId: null,       // 当前激活的搜索标签 id（仅 view=search_tab 时有效）
   cc: 'cn',
   lang: detectDefaultLang(),
+  tabIdCounter: 1,         // 自增 id，用于搜索标签唯一标识
+  searchTabs: [],          // [{ id, query, results, loading, error }]
   featured: {
     data: null,           // 原始 API 数据
     searchExtra: null,    // 从搜索页额外获取的游戏列表 { topsellers: [], specials: [] }
     tab: 'top_sellers',   // 'top_sellers' | 'specials'
-    loading: false,
-    error: null,
-  },
-  search: {
-    results: [],
-    query: '',
     loading: false,
     error: null,
   },
@@ -145,6 +142,7 @@ const loadingEl = $('loading');
 const errorCard = $('errorCard');
 const errorMsg = $('errorMsg');
 const featuredTabsEl = $('featuredTabs');
+const searchTabsEl = $('searchTabs');
 
 // ===== 工具函数 =====
 
@@ -534,7 +532,6 @@ function renderFeatured(category) {
     }
   }
 
-  state.search.results = normalized;
   renderResults(normalized);
 }
 
@@ -545,33 +542,101 @@ function setupFeaturedTabs() {
     if (!tab) return;
 
     const category = tab.dataset.category;
-
-    // === 搜索结果标签 ===
-    if (category === 'search_results') {
-      if (state.view === 'search') return; // 已在搜索视图
-      featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      state.view = 'search';
-      renderResults(state.search.results || []);
-      return;
-    }
-
-    // === 推荐标签（热门游戏 / 打折游戏） ===
     if (state.view === 'featured' && category === state.featured.tab) return;
 
+    // 切换到推荐标签
+    searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     state.featured.tab = category;
     state.view = 'featured';
+    state.activeTabId = null;
 
     // 从缓存渲染，不请求网络
     renderFeatured(category);
   });
+
+  // 搜索结果标签点击/关闭
+  searchTabsEl.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('.close-tab');
+    if (closeBtn) {
+      closeSearchTab(parseInt(closeBtn.dataset.tabId));
+      return;
+    }
+
+    const tab = e.target.closest('.search-tab');
+    if (!tab) return;
+
+    const tabId = parseInt(tab.dataset.tabId);
+    if (state.view === 'search_tab' && state.activeTabId === tabId) return;
+    activateSearchTab(tabId);
+  });
 }
 
-// ===== 搜索逻辑（异步，独立状态管理） =====
+// ===== 搜索标签管理 + 搜索逻辑 =====
 
-/** 搜索并展示结果 */
+/** 激活指定的搜索结果标签并渲染其内容 */
+function activateSearchTab(tabId) {
+  featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+  searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+
+  const tabEl = searchTabsEl.querySelector(`[data-tab-id="${tabId}"]`);
+  if (tabEl) tabEl.classList.add('active');
+
+  state.view = 'search_tab';
+  state.activeTabId = tabId;
+
+  const tabState = state.searchTabs.find(t => t.id === tabId);
+  if (!tabState) return;
+
+  destroyPagination();
+
+  if (tabState.loading) {
+    renderInlineLoading(resultsEl);
+  } else if (tabState.error) {
+    renderInlineError(resultsEl, `搜索失败：${escapeHtml(tabState.error)}`);
+  } else if (tabState.results.length === 0) {
+    resultsEl.innerHTML = `
+      <div class="no-results">
+        <div class="icon">🔍</div>
+        <div class="text">没有找到 "${escapeHtml(tabState.query)}" 相关游戏</div>
+      </div>`;
+  } else {
+    renderResults(tabState.results);
+  }
+}
+
+/** 关闭指定搜索结果标签，自动切换到下一个可用视图 */
+function closeSearchTab(tabId) {
+  const idx = state.searchTabs.findIndex(t => t.id === tabId);
+  if (idx === -1) return;
+
+  state.searchTabs.splice(idx, 1);
+
+  const tabEl = searchTabsEl.querySelector(`[data-tab-id="${tabId}"]`);
+  if (tabEl) tabEl.remove();
+
+  if (state.activeTabId === tabId) {
+    // 切到最近的历史选项卡，否则回到推荐
+    const remaining = searchTabsEl.querySelectorAll('.search-tab');
+    if (remaining.length > 0) {
+      const lastTab = remaining[remaining.length - 1];
+      activateSearchTab(parseInt(lastTab.dataset.tabId));
+    } else {
+      state.view = 'featured';
+      state.activeTabId = null;
+      featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+      const defaultTab = featuredTabsEl.querySelector('[data-category="top_sellers"]');
+      if (defaultTab) {
+        defaultTab.classList.add('active');
+        state.featured.tab = 'top_sellers';
+        renderFeatured('top_sellers');
+      }
+    }
+  }
+}
+
+/** 搜索并展示结果（启动时即刻创建标签、进入 loading） */
 async function doSearch() {
   const query = searchInput.value.trim();
   if (!query) {
@@ -580,12 +645,34 @@ async function doSearch() {
   }
 
   hideError();
-  state.view = 'search';
 
-  // 设置独立 loading 状态
-  state.search.loading = true;
-  state.search.error = null;
-  state.search.query = query;
+  // 如果已有同查询标签，直接切过去
+  const existing = state.searchTabs.find(t => t.query === query);
+  if (existing) {
+    activateSearchTab(existing.id);
+    return;
+  }
+
+  // 创建新标签状态
+  const id = state.tabIdCounter++;
+  const tabState = { id, query, results: [], loading: true, error: null };
+  state.searchTabs.push(tabState);
+
+  // 创建标签 DOM
+  const tabEl = document.createElement('button');
+  tabEl.className = 'search-tab active';
+  tabEl.dataset.tabId = id;
+  tabEl.innerHTML = `<span class="search-tab-label">🔍 ${escapeHtml(query)}</span><span class="close-tab" data-tab-id="${id}">✕</span>`;
+  searchTabsEl.appendChild(tabEl);
+
+  // 去激活其他所有标签
+  featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
+  searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+
+  state.view = 'search_tab';
+  state.activeTabId = id;
+
   destroyPagination();
   renderInlineLoading(resultsEl);
 
@@ -600,16 +687,15 @@ async function doSearch() {
       }
     }
 
-    // 视图守卫：如果用户中途切换到了推荐，放弃渲染
-    if (state.view !== 'search') return;
+    // 更新标签状态
+    const tabStateRef = state.searchTabs.find(t => t.id === id);
+    if (!tabStateRef) return; // 标签已被关闭
 
-    // 保存结果并激活"搜索结果"标签
-    state.search.loading = false;
-    state.search.results = items;
-    const searchTab = document.getElementById('searchResultTab');
-    searchTab.style.display = '';
-    featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
-    searchTab.classList.add('active');
+    tabStateRef.loading = false;
+    tabStateRef.results = items;
+
+    // 仅当此标签仍是激活态时才渲染
+    if (state.activeTabId !== id) return;
 
     if (items.length === 0) {
       resultsEl.innerHTML = `
@@ -621,9 +707,14 @@ async function doSearch() {
       renderResults(items);
     }
   } catch (err) {
-    state.search.loading = false;
-    state.search.error = err.message;
-    renderInlineError(resultsEl, `搜索失败：${escapeHtml(err.message)}`);
+    const tabStateRef = state.searchTabs.find(t => t.id === id);
+    if (tabStateRef) {
+      tabStateRef.loading = false;
+      tabStateRef.error = err.message;
+    }
+    if (state.activeTabId === id) {
+      renderInlineError(resultsEl, `搜索失败：${escapeHtml(err.message)}`);
+    }
   }
 }
 
@@ -1024,9 +1115,14 @@ function setupLangSelect() {
     state.lang = lang;
     if (state.view === 'featured') {
       loadFeatured(state.cc);
-    } else if (state.view === 'search' && state.search.query) {
-      searchInput.value = state.search.query;
-      doSearch();
+    } else if (state.view === 'search_tab' && state.activeTabId) {
+      const activeTab = state.searchTabs.find(t => t.id === state.activeTabId);
+      if (activeTab) {
+        searchInput.value = activeTab.query;
+        // 关闭旧标签，以新语言重新搜索
+        closeSearchTab(state.activeTabId);
+        doSearch();
+      }
     }
   });
 }

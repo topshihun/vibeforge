@@ -178,6 +178,66 @@ body::before {
   box-shadow: 0 0 12px rgba(130, 87, 229, 0.08);
 }
 
+/* === 搜索结果标签（可关闭） === */
+.search-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(130, 87, 229, 0.1);
+}
+.search-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(249, 168, 37, 0.12);
+  background: rgba(30, 30, 60, 0.4);
+  color: #888;
+  font-size: 0.82em;
+  cursor: pointer;
+  transition: all 0.25s;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+.search-tab:hover {
+  border-color: rgba(249, 168, 37, 0.3);
+  color: #bbb;
+  background: rgba(30, 30, 60, 0.6);
+}
+.search-tab.active {
+  background: rgba(249, 168, 37, 0.12);
+  border-color: rgba(249, 168, 37, 0.4);
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(249, 168, 37, 0.08);
+}
+.search-tab-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.close-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 0.7em;
+  color: #666;
+  transition: all 0.2s;
+  user-select: none;
+}
+.close-tab:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
 /* === 右侧主区域 === */
 .main-area {
   display: flex;
