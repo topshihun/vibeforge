@@ -551,7 +551,6 @@ function setupFeaturedTabs() {
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     state.featured.tab = category;
-    featuredTabsEl.style.display = 'flex'; // 搜索隐藏后，点标签切回来时恢复显示
     state.view = 'featured';
 
     // 从缓存渲染，不请求网络
@@ -570,7 +569,6 @@ async function doSearch() {
   }
 
   hideError();
-  featuredTabsEl.style.display = 'none';
   state.view = 'search';
 
   // 设置独立 loading 状态
