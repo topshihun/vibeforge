@@ -1293,6 +1293,13 @@ function setupCurrencySelect() {
     selected: item.cc === state.cc,
   }));
 
+  // 设置默认选中项
+  const defaultOpt = menu.querySelector(`[data-value="${state.cc}"]`);
+  if (defaultOpt) {
+    trigger.textContent = defaultOpt.textContent;
+    trigger.dataset.value = state.cc;
+  }
+
   // 选择事件
   menu.addEventListener('click', (e) => {
     const option = e.target.closest('.custom-select-option');
@@ -1318,6 +1325,13 @@ function setupLangSelect() {
     label: `${item.flag} ${item.native} (${item.label})`,
     selected: item.code === state.lang,
   }));
+
+  // 设置默认选中项
+  const defaultOpt = menu.querySelector(`[data-value="${state.lang}"]`);
+  if (defaultOpt) {
+    trigger.textContent = `${defaultOpt.textContent} 搜索`;
+    trigger.dataset.value = state.lang;
+  }
 
   menu.addEventListener('click', (e) => {
     const option = e.target.closest('.custom-select-option');
