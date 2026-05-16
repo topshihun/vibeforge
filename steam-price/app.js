@@ -133,6 +133,28 @@ const state = {
   scrollPositions: {},
 };
 
+// ===== 滚动位置管理 =====
+
+/** 根据当前 state 计算滚动缓存键 */
+function getTabKey() {
+  if (state.view === 'featured') return `featured:${state.featured.tab}`;
+  if (state.activeTabId) return `tab:${state.activeTabId}`;
+  return null;
+}
+
+/** 保存当前视图的滚动位置（必须在 state 变更前调用） */
+function saveScroll() {
+  const key = getTabKey();
+  if (key) state.scrollPositions[key] = resultsEl.scrollTop;
+}
+
+/** 恢复指定视图的滚动位置，需在 DOM 渲染后调用 */
+function restoreScroll(key) {
+  if (!key) return;
+  const pos = state.scrollPositions[key];
+  if (pos) resultsEl.scrollTop = pos;
+}
+
 // ===== 史低缓存 =====
 /** 内存缓存：getHistoricalLow 结果，1 小时后过期 */
 const priceLowCache = new Map();
@@ -687,11 +709,7 @@ function setupFeaturedTabs() {
     const category = tab.dataset.category;
     if (state.view === 'featured' && category === state.featured.tab) return;
 
-    // 保存当前视图的滚动位置（此时 state 仍是旧值）
-    const prevKey = state.view === 'featured'
-      ? `featured:${state.featured.tab}`
-      : (state.activeTabId ? `tab:${state.activeTabId}` : null);
-    if (prevKey) state.scrollPositions[prevKey] = resultsEl.scrollTop;
+    saveScroll();
 
     // 切换到推荐标签
     searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
@@ -726,11 +744,7 @@ function setupFeaturedTabs() {
 
 /** 激活指定的搜索结果标签并渲染其内容 */
 function activateSearchTab(tabId) {
-  // 保存当前视图的滚动位置（此时 state 仍是旧值）
-  const prevKey = state.view === 'featured'
-    ? `featured:${state.featured.tab}`
-    : (state.activeTabId ? `tab:${state.activeTabId}` : null);
-  if (prevKey) state.scrollPositions[prevKey] = resultsEl.scrollTop;
+  saveScroll();
 
   featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
   searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
@@ -767,6 +781,9 @@ function activateSearchTab(tabId) {
 function closeSearchTab(tabId) {
   const idx = state.searchTabs.findIndex(t => t.id === tabId);
   if (idx === -1) return;
+
+  // 关闭前保存该标签的滚动位置
+  saveScroll();
 
   state.searchTabs.splice(idx, 1);
 
@@ -805,11 +822,7 @@ async function doSearch(query, force) {
 
   hideError();
 
-  // 保存当前滚动位置（即将切换视图）
-  const prevKey = state.view === 'featured'
-    ? `featured:${state.featured.tab}`
-    : (state.activeTabId ? `tab:${state.activeTabId}` : null);
-  if (prevKey) state.scrollPositions[prevKey] = resultsEl.scrollTop;
+  saveScroll();
 
   // 如果已有同查询标签且非强制刷新，直接切过去
   if (!force) {
@@ -934,12 +947,7 @@ function renderResults(items) {
   // 启动下滑分页，每批 10 个，不写死总数
   initPagination(items);
 
-  // 恢复该视图的滚动位置（等 DOM 布局完成）
-  if (restoreKey && state.scrollPositions[restoreKey]) {
-    requestAnimationFrame(() => {
-      resultsEl.scrollTop = state.scrollPositions[restoreKey] || 0;
-    });
-  }
+  restoreScroll(restoreKey);
 }
 
 /** 创建单个游戏卡片 */
