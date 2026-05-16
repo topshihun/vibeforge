@@ -491,9 +491,9 @@ async function searchViaAppList(query, maxResults = 20) {
       apps = _appListInMemory = cached;
     } else {
       try {
-        // 全游戏列表 ~4MB → 超时放宽到 20s
+        // 使用更短的切换超时的 fetch 尝试 applist
         const url = 'https://api.steampowered.com/ISteamApps/GetAppList/v2/';
-        const res = await proxyFetchWithRetry(url, {}, 3);
+        const res = await proxyFetchWithRetry(url, {}, 2);
         const json = await res.json();
         apps = json.applist?.apps || [];
         _appListInMemory = apps;
@@ -503,8 +503,9 @@ async function searchViaAppList(query, maxResults = 20) {
           console.warn('AppList 缓存写入失败（超出配额）:', e.message);
         }
       } catch (e) {
-        console.warn('searchViaAppList 获取失败（不影响主结果）:', e.message);
-        return [];
+        // applist 获取失败 → 再用 Steam 搜索页 HTML 抓取作为备选
+        console.warn('searchViaAppList 获取失败:', e.message);
+        return searchViaSteamSearchPage(query, maxResults);
       }
     }
   }
@@ -526,6 +527,63 @@ async function searchViaAppList(query, maxResults = 20) {
       });
       if (matched.length >= maxResults) break;
     }
+  }
+
+  return matched;
+}
+
+/** 备选：抓取 Steam 搜索页面 HTML 解析游戏列表（作为 applist 失败的 fallback） */
+async function searchViaSteamSearchPage(query, maxResults = 20) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const matched = [];
+
+  try {
+    // 每页 25 条，最多爬 2 页 = 50 条，从中匹配
+    for (let page = 0; page < 2 && matched.length < maxResults; page++) {
+      const url = `https://store.steampowered.com/search/?term=${encodeURIComponent(query)}&category1=998&page=${page}`;
+      const res = await proxyFetchWithRetry(url);
+      const html = await res.text();
+
+      // 用正则解析游戏行（<a> 标签包含 data-ds-appid 属性）
+      // Steam 搜索页每行：<a class="search_result_row ..." data-ds-appid="12345">
+      const rowRegex = /<a[^>]*data-ds-appid="(\d+)"[^>]*>[\s\S]*?<\/a>/gi;
+      let match;
+
+      while ((match = rowRegex.exec(html)) !== null && matched.length < maxResults) {
+        const appId = parseInt(match[1]);
+        if (!appId || isNaN(appId)) continue;
+
+        // 跳过 DLC/软件等非游戏 (category1=998 已经过滤了)
+        // 提取名称
+        const block = match[0];
+        const titleMatch = block.match(/<span class="title">([^<]*)<\/span>/i);
+        const name = titleMatch ? titleMatch[1].trim() : '';
+
+        if (!name || !name.toLowerCase().includes(q)) continue;
+
+        // 提取价格信息
+        let price = null;
+        const discountMatch = block.match(/data-price-final="(\d+)"/i);
+        if (discountMatch) {
+          price = parseInt(discountMatch[1]) / 100;
+        }
+
+        matched.push({
+          id: appId,
+          name,
+          tiny_image: `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/capsule_sm_120.jpg`,
+          header_image: `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
+          metacritic_score: 0,
+          steam_rating_percent: 0,
+          release_date: '',
+          price: price ? { final: price * 100, initial: price * 100, discount_percent: 0 } : null,
+          _hasPrice: !!price,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('searchViaSteamSearchPage 解析失败（不影响主结果）:', e.message);
   }
 
   return matched;
