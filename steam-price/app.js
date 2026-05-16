@@ -373,7 +373,10 @@ async function getHistoricalLow(steamAppId) {
       const gameRes = await proxyFetchWithRetry(gameUrl, {}, 1);
       if (!gameRes.ok) throw new Error(`Game API HTTP ${gameRes.status}`);
       const gameData = await gameRes.json();
-      if (!Array.isArray(gameData) || gameData.length === 0) throw new Error('Game data empty');
+
+      // 游戏不在 CheapShark 数据库 → 真·无史低，不重试
+      if (!Array.isArray(gameData) || gameData.length === 0) return null;
+
       const entry = gameData[0];
       const dealId = entry.cheapestDealID;
       const retailUsd = parseFloat(entry.retailPrice) || null;
@@ -406,7 +409,7 @@ async function getHistoricalLow(steamAppId) {
       }
       return null;
     } catch (err) {
-      if (attempt >= 2) return null;
+      if (attempt >= 2) throw err; // 网络/代理错误 → 让调用方显示"查询失败"
       await new Promise(r => setTimeout(r, 2000)); // 等待 2s 后重试整个流程
     }
   }
