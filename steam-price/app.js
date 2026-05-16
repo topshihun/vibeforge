@@ -121,6 +121,15 @@ const state = {
     loading: false,
     error: null,
   },
+  /** 下滑分页状态 */
+  page: {
+    items: [],      // 当前视图的所有数据
+    rendered: 0,    // 已渲染到 DOM 的数量
+    active: false,  // 分页是否生效
+    batch: 10,      // 每批追加条目数
+    observer: null, // IntersectionObserver 实例
+    sentinel: null, // 底部哨兵元素
+  },
   exchangeRates: null,    // USD → * 汇率缓存
 };
 
@@ -430,6 +439,7 @@ async function loadFeatured(cc) {
   // 设置独立 loading 状态
   state.featured.loading = true;
   state.featured.error = null;
+  destroyPagination();
   renderInlineLoading(resultsEl);
 
   try {
@@ -455,6 +465,7 @@ function renderFeatured(category) {
 
   const data = state.featured.data;
   if (!data || !data[category]) {
+    destroyPagination();
     resultsEl.innerHTML = `
       <div class="no-results">
         <div class="icon">📭</div>
@@ -465,6 +476,7 @@ function renderFeatured(category) {
 
   const rawItems = data[category].items || [];
   if (rawItems.length === 0) {
+    destroyPagination();
     resultsEl.innerHTML = `
       <div class="no-results">
         <div class="icon">📭</div>
@@ -473,8 +485,7 @@ function renderFeatured(category) {
     return;
   }
 
-  const items = rawItems.slice(0, 20);
-  const normalized = items.map(normalizeFeaturedItem);
+  const normalized = rawItems.map(normalizeFeaturedItem);
   state.search.results = normalized; // 共享给搜索缓存（用于货币切换）
   renderResults(normalized);
 }
@@ -516,6 +527,7 @@ async function doSearch() {
   state.search.loading = true;
   state.search.error = null;
   state.search.query = query;
+  destroyPagination();
   renderInlineLoading(resultsEl);
 
   try {
@@ -553,21 +565,20 @@ async function doSearch() {
 
 /** 渲染搜索结果列表（通用，featured 和 search 共用） */
 function renderResults(items) {
+  destroyPagination();
   resultsEl.innerHTML = '';
-  const displayItems = items.slice(0, 20);
 
-  for (const item of displayItems) {
-    const card = createGameCard(item);
-    resultsEl.appendChild(card);
+  if (items.length === 0) {
+    resultsEl.innerHTML = `
+      <div class="no-results">
+        <div class="icon">🔍</div>
+        <div class="text">没有找到相关游戏</div>
+      </div>`;
+    return;
   }
 
-  if (items.length > 20) {
-    const more = document.createElement('div');
-    more.className = 'no-results';
-    more.style.padding = '16px';
-    more.innerHTML = `<div class="text" style="color:#666;">...还有 ${items.length - 20} 个结果未显示</div>`;
-    resultsEl.appendChild(more);
-  }
+  // 启动下滑分页，每批 10 个，不写死总数
+  initPagination(items);
 }
 
 /** 创建单个游戏卡片 */
@@ -661,6 +672,77 @@ function renderCardPriceInline(card, appId, price, cc) {
   html += `<span class="price-history-row" id="history-${appId}"><span class="price-na">⏳ 史低查询中...</span></span>`;
   priceRow.innerHTML = html;
   loadHistoryLow(appId, card);
+}
+
+// ===== 下滑分页（无限滚动） =====
+
+/** 初始化分页并渲染第一批 */
+function initPagination(items) {
+  destroyPagination();
+  if (items.length === 0) return;
+
+  state.page.active = true;
+  state.page.items = items;
+  state.page.rendered = 0;
+
+  // 创建底部哨兵
+  const sentinel = document.createElement('div');
+  sentinel.className = 'scroll-sentinel';
+  state.page.sentinel = sentinel;
+  resultsEl.appendChild(sentinel);
+
+  // IntersectionObserver：哨兵进入视口 → 追加一批
+  state.page.observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && state.page.active) {
+      renderNextBatch();
+    }
+  }, { rootMargin: '300px' });
+  state.page.observer.observe(sentinel);
+
+  // 渲染第一批
+  renderNextBatch();
+}
+
+/** 销毁分页状态 */
+function destroyPagination() {
+  state.page.active = false;
+  if (state.page.observer) {
+    state.page.observer.disconnect();
+    state.page.observer = null;
+  }
+  if (state.page.sentinel && state.page.sentinel.parentNode) {
+    state.page.sentinel.parentNode.removeChild(state.page.sentinel);
+  }
+  state.page.sentinel = null;
+  state.page.items = [];
+  state.page.rendered = 0;
+}
+
+/** 追加下一批卡片到 DOM */
+function renderNextBatch() {
+  const { items, rendered, batch } = state.page;
+  if (!state.page.active || rendered >= items.length) return;
+
+  const end = Math.min(rendered + batch, items.length);
+  const fragment = document.createDocumentFragment();
+  for (let i = rendered; i < end; i++) {
+    fragment.appendChild(createGameCard(items[i]));
+  }
+  // 插入到哨兵之前
+  if (state.page.sentinel && state.page.sentinel.parentNode) {
+    resultsEl.insertBefore(fragment, state.page.sentinel);
+  }
+  state.page.rendered = end;
+
+  // 全部加载完毕 → 移除哨兵和 observer
+  if (end >= items.length) {
+    if (state.page.observer) state.page.observer.disconnect();
+    if (state.page.sentinel && state.page.sentinel.parentNode) {
+      state.page.sentinel.parentNode.removeChild(state.page.sentinel);
+    }
+    state.page.sentinel = null;
+    state.page.observer = null;
+  }
 }
 
 /** 为主货币加载价格 */

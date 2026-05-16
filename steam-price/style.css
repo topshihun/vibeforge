@@ -441,6 +441,12 @@ body::before {
 }
 .expand-btn:hover { background: rgba(130, 87, 229, 0.15); }
 
+/* === 下滑分页哨兵（不可见占位） === */
+.scroll-sentinel {
+  height: 1px;
+  pointer-events: none;
+}
+
 /* === 无结果 === */
 .no-results {
   text-align: center;
