@@ -155,6 +155,12 @@ function restoreScroll(key) {
   if (pos) resultsEl.scrollTop = pos;
 }
 
+/** scroll 事件：每个视图独立实时保存滚动位置，不依赖切换时机 */
+resultsEl.addEventListener('scroll', () => {
+  const key = getTabKey();
+  if (key) state.scrollPositions[key] = resultsEl.scrollTop;
+});
+
 // ===== 史低缓存 =====
 /** 内存缓存：getHistoricalLow 结果，1 小时后过期 */
 const priceLowCache = new Map();
@@ -709,8 +715,6 @@ function setupFeaturedTabs() {
     const category = tab.dataset.category;
     if (state.view === 'featured' && category === state.featured.tab) return;
 
-    saveScroll();
-
     // 切换到推荐标签
     searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
     featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
@@ -744,8 +748,6 @@ function setupFeaturedTabs() {
 
 /** 激活指定的搜索结果标签并渲染其内容 */
 function activateSearchTab(tabId) {
-  saveScroll();
-
   featuredTabsEl.querySelectorAll('.featured-tab').forEach(t => t.classList.remove('active'));
   searchTabsEl.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
 
@@ -821,8 +823,6 @@ async function doSearch(query, force) {
   }
 
   hideError();
-
-  saveScroll();
 
   // 如果已有同查询标签且非强制刷新，直接切过去
   if (!force) {
