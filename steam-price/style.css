@@ -489,6 +489,44 @@ body::before {
 .game-meta .rating.mixed { color: #facc15; }
 .game-meta .rating.negative { color: #f87171; }
 
+/* === 卡片右侧区域（史低） === */
+.game-card-aside {
+  margin-left: auto;
+  text-align: right;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+.game-card-aside .historical-low {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.game-card-aside .historical-low .label {
+  font-size: 0.72em;
+  color: #888;
+}
+.game-card-aside .historical-low .lowest-ever {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: #fbbf24;
+}
+.game-card-aside .historical-low .low-date {
+  font-size: 0.68em;
+  color: #666;
+}
+.game-card-aside .historical-low .match-current {
+  font-size: 0.65em;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.game-card-aside .price-na {
+  font-size: 0.75em;
+  color: #555;
+}
+
 /* === 价格行 === */
 .game-price-row {
   display: flex;
@@ -525,34 +563,6 @@ body::before {
 .price-na {
   color: #555;
   font-size: 0.85em;
-}
-
-/* === 史低价格 === */
-.price-history-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-  font-size: 0.85em;
-}
-.historical-low {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #fbbf24;
-}
-.historical-low .label { color: #888; }
-.lowest-ever {
-  color: #fbbf24;
-  font-weight: 700;
-}
-.match-current {
-  color: #4ade80;
-  font-size: 0.8em;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(74, 222, 128, 0.1);
 }
 
 /* === 多币种价格详情 === */

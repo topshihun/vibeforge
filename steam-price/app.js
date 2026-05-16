@@ -848,6 +848,9 @@ function createGameCard(item) {
           ${metacritic_score ? `<span>🏆 ${metacritic_score}</span>` : ''}
         </div>
       </div>
+      <div class="game-card-aside" id="aside-${id}">
+        <span class="price-na">⏳ 史低查询中...</span>
+      </div>
     </div>
     <div class="game-price-row" id="price-row-${id}">
       <span class="price-na">⏳ 正在查询价格...</span>
@@ -900,12 +903,8 @@ function renderCardPriceInline(card, appId, price, cc) {
     html = `<span class="price-current">${symbol}${finalPrice}</span>`;
   }
 
-  // 史低行（仅 USD 支持）
-  if (state.cc === 'us') {
-    html += `<span class="price-history-row" id="history-${appId}"><span class="price-na">⏳ 史低查询中...</span></span>`;
-  }
   priceRow.innerHTML = html;
-  if (state.cc === 'us') loadHistoryLow(appId, card);
+  loadHistoryLow(appId, card);
 }
 
 // ===== 下滑分页（无限滚动） =====
@@ -1009,43 +1008,41 @@ async function loadPriceForCard(appId, card, cc) {
       html = `<span class="price-current">${symbol}${finalPrice}</span>`;
     }
 
-    // 史低行（仅 USD 支持）
-    if (state.cc === 'us') {
-      html += `<span class="price-history-row" id="history-${appId}"><span class="price-na">⏳ 史低查询中...</span></span>`;
-    }
     priceRow.innerHTML = html;
-
-    if (state.cc === 'us') loadHistoryLow(appId, card);
+    loadHistoryLow(appId, card);
   } catch (err) {
     priceRow.innerHTML = `<span class="price-na">价格获取失败</span>`;
   }
 }
 
-/** 史低价格查询（主卡片） */
+/** 史低价格查询（渲染到卡片右侧 aside 区域） */
 async function loadHistoryLow(appId, card) {
-  const historyEl = card.querySelector(`#history-${appId}`);
-  if (!historyEl) return;
+  const asideEl = card.querySelector(`#aside-${appId}`);
+  if (!asideEl) return;
 
   try {
     const data = await getHistoricalLow(appId);
     if (data === null) {
-      historyEl.innerHTML = `<span class="price-na">无史低</span>`;
+      asideEl.innerHTML = `<span class="price-na">无史低</span>`;
       return;
     }
 
     // CheapShark API 仅返回 USD 史低
     const isCurrentLow = data.currentUsd !== null && data.lowestUsd >= data.currentUsd - 0.01;
 
-    let html = `
-      <span class="historical-low">
-        <span class="label">📉 史低:</span>
-        <span class="lowest-ever">$${data.lowestUsd.toFixed(2)}</span>
-        ${data.lowestDate ? `<span class="price-na" style="font-size:0.8em;">(${formatDate(data.lowestDate)})</span>` : ''}
-        ${isCurrentLow ? `<span class="match-current">🔥 当前史低</span>` : ''}
-      </span>`;
-    historyEl.innerHTML = html;
+    let html = `<span class="historical-low">
+      <span class="label">📉 史低</span>
+      <span class="lowest-ever">$${data.lowestUsd.toFixed(2)}</span>`;
+    if (data.lowestDate) {
+      html += `<span class="low-date">${formatDate(data.lowestDate)}</span>`;
+    }
+    if (isCurrentLow) {
+      html += `<span class="match-current">当前史低</span>`;
+    }
+    html += `</span>`;
+    asideEl.innerHTML = html;
   } catch {
-    const el = card.querySelector(`#history-${appId}`);
+    const el = card.querySelector(`#aside-${appId}`);
     if (el) el.innerHTML = `<span class="price-na">史低查询失败</span>`;
   }
 }
