@@ -207,10 +207,20 @@ const errorMsg = $('errorMsg');
 const featuredTabsEl = $('featuredTabs');
 const searchTabsEl = $('searchTabs');
 
-// ===== 滚动位置实时保存 =====
+// ===== 滚动懒加载（scroll 实时保存 + 接近底部检测） =====
 resultsEl.addEventListener('scroll', () => {
   const view = currentView();
-  if (view) view.scrollTop = resultsEl.scrollTop;
+  if (!view) return;
+  view.scrollTop = resultsEl.scrollTop;
+
+  // 懒加载检测：接近底部 400px 时加载下一批
+  if (view._sentinel && view.rendered < view.items.length) {
+    const threshold = 400;
+    const distToBottom = resultsEl.scrollHeight - resultsEl.scrollTop - resultsEl.clientHeight;
+    if (distToBottom < threshold) {
+      renderNextBatch();
+    }
+  }
 });
 
 // ===== 工具函数 =====
@@ -1060,6 +1070,17 @@ function initPagination(items, startFrom = 0) {
   } else {
     // 渲染第一批
     renderNextBatch();
+  }
+
+  // 同步填满视口：第一批（或恢复后）若未填满，持续追加直到哨兵低于 rootMargin
+  if (view && view._sentinel && view.rendered < items.length) {
+    for (let safety = 0; safety < 50; safety++) {
+      const sRect = view._sentinel.getBoundingClientRect();
+      const cRect = resultsEl.getBoundingClientRect();
+      if (sRect.top - cRect.top >= cRect.height + 300) break;
+      renderNextBatch();
+      if (view.rendered >= items.length || !view._sentinel) break;
+    }
   }
 }
 
