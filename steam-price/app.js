@@ -1022,6 +1022,7 @@ function renderCardPriceInline(card, appId, price, cc) {
 /** 初始化分页并渲染第一批。如果 startFrom > 0，则直接渲染到 startFrom 的位置 */
 function initPagination(items, startFrom = 0) {
   destroyPagination();
+  resultsEl.innerHTML = '';
 
   // 创建底部哨兵
   const sentinel = document.createElement('div');
