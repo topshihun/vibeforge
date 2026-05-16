@@ -655,6 +655,8 @@ function renderFeatured(category) {
   }
 
   renderResults(normalized);
+  // 推荐视图更新后，确保游戏名称为当前语言（featuredcategories 返回的名称可能不含本地化名）
+  updateCardLanguage(state.lang).catch(() => {});
 }
 
 /** 设置推荐游戏标签页切换（纯本地渲染，无网络请求） */
@@ -833,6 +835,14 @@ async function doSearch(query, force) {
       }
     }
 
+    // 仍然没结果时，尝试用中文搜索（方便中文名搜索）
+    if (items.length === 0 && state.lang !== 'schinese') {
+      const chineseItems = await searchSteamStoreFull(query, 'schinese');
+      if (chineseItems.length > 0) {
+        items.push(...chineseItems);
+      }
+    }
+
     // 更新标签状态
     const tabStateRef = state.searchTabs.find(t => t.id === id);
     if (!tabStateRef) return; // 标签已被关闭
@@ -851,6 +861,8 @@ async function doSearch(query, force) {
         </div>`;
     } else {
       renderResults(items);
+      // 渲染后立即更新所有卡片名称为当前语言（AppDetails API 比搜索 API 返回的名称更准确）
+      updateCardLanguage(state.lang).catch(() => {});
     }
   } catch (err) {
     const tabStateRef = state.searchTabs.find(t => t.id === id);
