@@ -155,14 +155,15 @@ const CORS_PROXIES = [
 
 // ===== 网络请求工具 =====
 
-/** 带超时的 fetch（默认 5s 超时） */
-async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+/** 带超时的 fetch（默认 10s 超时，不发送 Referer 避免代理拦截） */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       ...options,
       signal: controller.signal,
+      referrerPolicy: 'no-referrer',
       headers: { 'Accept': 'application/json', ...options.headers },
     });
     return res;
@@ -471,15 +472,33 @@ async function loadFeatured(cc) {
   renderInlineLoading(resultsEl);
 
   try {
-    // 并行获取推荐数据和搜索结果（各 50 条）
-    const [featuredData, topsellersExtra, specialsExtra] = await Promise.all([
-      fetchFeatured(cc, state.lang),
-      fetchSearchCategory('topsellers', cc, state.lang),
-      fetchSearchCategory('specials', cc, state.lang),
-    ]);
+    // 串行获取（避免同时并发导致代理限流），各自独立 catch
+    let featuredData, topsellersExtra, specialsExtra;
 
-    // 视图守卫：如果用户中途切换到了搜索，放弃渲染
+    try {
+      featuredData = await fetchFeatured(cc, state.lang);
+    } catch (e) {
+      console.warn('fetchFeatured 失败:', e.message);
+    }
+
+    // 视图守卫
     if (state.view !== 'featured') return;
+
+    try {
+      topsellersExtra = await fetchSearchCategory('topsellers', cc, state.lang);
+    } catch (e) {
+      console.warn('fetchSearchCategory(topsellers) 失败:', e.message);
+    }
+
+    try {
+      specialsExtra = await fetchSearchCategory('specials', cc, state.lang);
+    } catch (e) {
+      console.warn('fetchSearchCategory(specials) 失败:', e.message);
+    }
+
+    if (!featuredData) {
+      throw new Error('热门游戏接口全部失败');
+    }
 
     state.featured.data = featuredData;
     state.featured.searchExtra = {
