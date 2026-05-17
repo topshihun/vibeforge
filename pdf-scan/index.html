@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>PDF 扫描模拟 — VibeForge</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📠</text></svg>">
+<base href="/pdf-scan/">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ===== 左侧控制面板 ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">📠</div>
+      <div class="title">PDF 扫描模拟</div>
+      <div class="subtitle">Scan Simulator</div>
+      <a class="back-link" href="/">← 返回首页</a>
+    </div>
+
+    <!-- 文件操作 -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">📂 文件操作</div>
+      <label class="btn btn-import" id="importBtn">
+        <input type="file" id="fileInput" accept=".pdf" hidden>
+        📄 导入 PDF
+      </label>
+      <div id="fileInfo" class="file-info" style="display:none"></div>
+      <button class="btn btn-export" id="exportBtn" disabled>💾 导出扫描件 PDF</button>
+    </div>
+
+    <!-- 页面导航 -->
+    <div class="ctrl-group" id="pageNav" style="display:none">
+      <div class="ctrl-label">📄 页面导航</div>
+      <div class="page-nav">
+        <button class="btn-sm" id="prevPage">◀</button>
+        <span id="pageInfo">0 / 0</span>
+        <button class="btn-sm" id="nextPage">▶</button>
+      </div>
+    </div>
+
+    <!-- 水印设置 -->
+    <details class="ctrl-details" open>
+      <summary class="ctrl-label">💧 水印设置</summary>
+      <div class="ctrl-body">
+        <label class="field-label">水印文字</label>
+        <input class="field-input" type="text" id="wmText" placeholder="输入水印文字..." value="扫描件">
+        <label class="field-label">字体大小</label>
+        <input class="field-input" type="range" id="wmSize" min="12" max="200" value="48">
+        <div class="range-val" id="wmSizeVal">48px</div>
+        <label class="field-label">颜色</label>
+        <input class="field-input color-picker" type="color" id="wmColor" value="#aaaaaa">
+        <label class="field-label">不透明度</label>
+        <input class="field-input" type="range" id="wmOpacity" min="0" max="100" value="30">
+        <div class="range-val" id="wmOpacityVal">30%</div>
+        <label class="field-label">旋转角度</label>
+        <input class="field-input" type="range" id="wmAngle" min="-90" max="90" value="-30">
+        <div class="range-val" id="wmAngleVal">-30°</div>
+      </div>
+    </details>
+
+    <!-- 倾斜设置 -->
+    <details class="ctrl-details" open>
+      <summary class="ctrl-label">↗️ 倾斜设置</summary>
+      <div class="ctrl-body">
+        <label class="field-label">倾斜角度</label>
+        <input class="field-input" type="range" id="skewAngle" min="-10" max="10" value="0" step="0.1">
+        <div class="range-val" id="skewAngleVal">0.0°</div>
+        <label class="field-label">随机倾斜范围</label>
+        <input class="field-input" type="range" id="skewRandom" min="0" max="5" value="0" step="0.1">
+        <div class="range-val" id="skewRandomVal">±0.0°</div>
+      </div>
+    </details>
+
+    <!-- 图像调整 -->
+    <details class="ctrl-details" open>
+      <summary class="ctrl-label">🎨 图像调整</summary>
+      <div class="ctrl-body">
+        <label class="field-label">亮度</label>
+        <input class="field-input" type="range" id="brightness" min="0" max="200" value="100">
+        <div class="range-val" id="brightnessVal">100%</div>
+        <label class="field-label">对比度</label>
+        <input class="field-input" type="range" id="contrast" min="0" max="200" value="100">
+        <div class="range-val" id="contrastVal">100%</div>
+        <label class="field-label">模糊 (高斯)</label>
+        <input class="field-input" type="range" id="blur" min="0" max="10" value="0" step="0.1">
+        <div class="range-val" id="blurVal">0.0</div>
+        <label class="field-label">噪点</label>
+        <input class="field-input" type="range" id="noise" min="0" max="50" value="0">
+        <div class="range-val" id="noiseVal">0</div>
+        <label class="field-label">发黄/老化</label>
+        <input class="field-input" type="range" id="yellowing" min="0" max="100" value="0">
+        <div class="range-val" id="yellowingVal">0%</div>
+      </div>
+    </details>
+
+    <!-- 分辨率设置 -->
+    <details class="ctrl-details">
+      <summary class="ctrl-label">🔍 分辨率设置</summary>
+      <div class="ctrl-body">
+        <label class="field-label">输出 DPI</label>
+        <select class="field-select" id="dpiSelect">
+          <option value="72">72 DPI（屏幕）</option>
+          <option value="150" selected>150 DPI（草稿）</option>
+          <option value="200">200 DPI</option>
+          <option value="300">300 DPI（标准）</option>
+          <option value="600">600 DPI（高清）</option>
+        </select>
+      </div>
+    </details>
+
+    <!-- 签名与印章 -->
+    <details class="ctrl-details">
+      <summary class="ctrl-label">✍️ 签名与印章</summary>
+      <div class="ctrl-body">
+        <label class="btn btn-sm-full" id="addSignatureBtn">🖊 添加签名图片</label>
+        <input type="file" id="signatureInput" accept="image/*" hidden>
+        <label class="btn btn-sm-full" id="addStampBtn">🔴 添加印章图片</label>
+        <input type="file" id="stampInput" accept="image/*" hidden>
+        <div id="overlayList" class="overlay-list"></div>
+      </div>
+    </details>
+
+    <!-- 元数据设置 -->
+    <details class="ctrl-details">
+      <summary>📋 PDF 元数据</summary>
+      <div class="ctrl-body">
+        <label class="field-label">标题</label>
+        <input class="field-input" type="text" id="metaTitle" placeholder="文档标题">
+        <label class="field-label">作者</label>
+        <input class="field-input" type="text" id="metaAuthor" placeholder="作者">
+        <label class="field-label">主题</label>
+        <input class="field-input" type="text" id="metaSubject" placeholder="主题">
+        <label class="field-label">关键词</label>
+        <input class="field-input" type="text" id="metaKeywords" placeholder="关键词，逗号分隔">
+      </div>
+    </details>
+  </aside>
+
+  <!-- ===== 主预览区 ===== -->
+  <main class="main-area">
+    <div class="preview-toolbar">
+      <span class="preview-title">📄 预览</span>
+      <span class="preview-hint" id="previewHint">请导入 PDF 文件开始编辑</span>
+    </div>
+    <div class="preview-canvas-wrap" id="previewWrap">
+      <canvas id="previewCanvas"></canvas>
+      <div class="preview-placeholder" id="placeholder">
+        <div class="placeholder-icon">📠</div>
+        <div class="placeholder-text">拖拽 PDF 文件到此处，或点击左侧"导入 PDF"</div>
+      </div>
+    </div>
+    <div class="preview-status" id="previewStatus" style="display:none">
+      <span id="statusMsg">就绪</span>
+      <span id="renderTime"></span>
+    </div>
+  </main>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
