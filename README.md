@@ -17,17 +17,20 @@
 
 <table>
   <tr>
-    <td align="center" width="25%">
+    <td align="center" width="20%">
       <b>🐍 贪吃蛇</b><br><sub>snake/</sub><br>双人对战 · 穿墙
     </td>
-    <td align="center" width="25%">
+    <td align="center" width="20%">
       <b>🧱 俄罗斯方块</b><br><sub>tetris/</sub><br>幽灵预览 · 加速
     </td>
-    <td align="center" width="25%">
+    <td align="center" width="20%">
       <b>🎯 坦克大战</b><br><sub>tank-war/</sub><br>多种墙体 · AI
     </td>
-    <td align="center" width="25%">
+    <td align="center" width="20%">
       <b>✈️ 飞机大战</b><br><sub>plane-war/</sub><br>雷霆出击 · 难度
+    </td>
+    <td align="center" width="20%">
+      <b>🎮 2048</b><br><sub>2048/</sub><br>合并数字 · 挑战高分
     </td>
   </tr>
   <tr>
@@ -42,6 +45,9 @@
     </td>
     <td align="center">
       <b>🧠 编译器实验室</b><br><sub>compiler-lab/</sub><br>C → 汇编
+    </td>
+    <td align="center">
+      <b>📠 PDF 扫描模拟</b><br><sub>pdf-scan/</sub><br>扫描效果 · 水印
     </td>
   </tr>
 </table>
