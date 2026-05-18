@@ -7,6 +7,10 @@ const { mkdirSync, rmSync, readFileSync, existsSync, cpSync } = require("fs");
 const path = require("path");
 
 // ===== Helpers =====
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function hasBuildScript(projectDir) {
   const pkgPath = path.join(projectDir, "package.json");
   if (!existsSync(pkgPath)) return false;
@@ -64,15 +68,19 @@ for (const pid of projectIds) {
 
   // Extract script src paths from HTML (preserves order)
   const scriptRegex = /<script\s+src="([^"]+)"><\/script>/g;
-  const scriptSrcs = [];
+  const allScriptSrcs = [];
   let match;
   while ((match = scriptRegex.exec(html)) !== null) {
-    scriptSrcs.push(match[1]);
+    allScriptSrcs.push(match[1]);
   }
 
-  if (scriptSrcs.length > 0) {
+  // Split: local files to bundle, CDN/absolute URLs to keep in HTML
+  const localSrcs = allScriptSrcs.filter(s => !/^https?:\/\//.test(s));
+  const cdnSrcs = allScriptSrcs.filter(s => /^https?:\/\//.test(s));
+
+  if (localSrcs.length > 0) {
     let combinedJs = "";
-    for (const src of scriptSrcs) {
+    for (const src of localSrcs) {
       const jsPath = path.join(projectDir, src);
       if (existsSync(jsPath)) {
         combinedJs += readFileSync(jsPath, "utf-8") + "\n";
@@ -85,13 +93,19 @@ for (const pid of projectIds) {
     mkdirSync(jsOutDir, { recursive: true });
     write(path.join(jsOutDir, "app.js"), combinedJs);
 
-    html = html.replace(/<script\s+src="[^"]+"><\/script>\s*/g, "");
+    // Remove only local script tags (preserve CDN/absolute)
+    for (const src of localSrcs) {
+      html = html.replace(
+        new RegExp(`<script\\s+src="${escapeRegex(src)}"><\\/script>\\s*`),
+        ""
+      );
+    }
     html = html.replace(
       "</body>",
       '<!-- JS (combined) -->\n<script src="js/app.js"></script>\n</body>'
     );
 
-    console.log(`  📦 ${pid} — ${scriptSrcs.length} JS files → 1 bundle`);
+    console.log(`  📦 ${pid} — ${localSrcs.length} JS files → 1 bundle`);
   }
 
   const htmlOutDir = path.join("dist", projectDir);
