@@ -91,6 +91,14 @@ const state = {
   overlays: [],        // { id, type, name, img, x, y, width, height }
   _overlayIdCounter: 0,
   _renderId: 0,
+  // 缓存：原始 PDF 渲染（不含效果），避免滑块拖动时重复渲染 PDF
+  _baseCache: null,     // OffscreenCanvas（当前页原始渲染）
+  _cachedPageIndex: -1, // 缓存的页码
+  _cachedDpi: 0,        // 缓存的 DPI
+  _invalidCache: true,  // 标记缓存需要重建
+  // rAF 批处理
+  _rafId: null,
+  _needsRender: false,
   // 示例页面占位尺寸（A4 比例）
   demoWidth: 595,
   demoHeight: 842,
@@ -201,6 +209,11 @@ function resetState() {
   state.currentPage = 1;
   state.totalPages = 0;
   state.fileName = '';
+  state._baseCache = null;
+  state._cachedPageIndex = -1;
+  state._cachedDpi = 0;
+  state._invalidCache = true;
+  state.overlays = [];
   fileInfo.style.display = 'none';
   pageNav.style.display = 'none';
   exportBtn.disabled = false;
@@ -274,7 +287,7 @@ function getEffectiveSkew(pageIndex) {
   return base + r * range;
 }
 
-/** 渲染当前页（含所有效果） */
+/** 渲染当前页（含所有效果）— 支持缓存加速 */
 async function renderCurrentPage() {
   if (!state.pdfDoc) {
     if (state.isDemo) {
@@ -285,16 +298,16 @@ async function renderCurrentPage() {
 
   const renderId = nextRenderId();
   const pageIndex = state.currentPage;
-  const page = await state.pdfDoc.getPage(pageIndex);
-
-  // 计算渲染尺寸
-  const viewport = page.getViewport({ scale: state.renderScale });
   const dpi = parseInt(dpiSelect.value) || 150;
-  const dpiScale = dpi / 72; // PDF 默认 72 DPI
-  const exportW = Math.round(viewport.width * dpiScale / state.renderScale);
-  const exportH = Math.round(viewport.height * dpiScale / state.renderScale);
+  const dpiScale = dpi / 72;
 
-  // 屏幕预览尺寸（保持比例但限制最大宽度）
+  // 计算目标渲染尺寸
+  const page = await state.pdfDoc.getPage(pageIndex);
+  const viewport = page.getViewport({ scale: 1 });
+  const exportW = Math.round(viewport.width * dpiScale);
+  const exportH = Math.round(viewport.height * dpiScale);
+
+  // 屏幕预览尺寸
   const maxPreviewW = previewWrap.clientWidth - 40;
   const previewScale = Math.min(1, maxPreviewW / exportW);
   const previewW = Math.round(exportW * previewScale);
@@ -307,41 +320,44 @@ async function renderCurrentPage() {
 
   const t0 = performance.now();
 
-  // 1. 渲染原始 PDF 页面到离屏 canvas
+  // 检查缓存：页码或 DPI 变化时重建
+  if (state._invalidCache || state._cachedPageIndex !== pageIndex || state._cachedDpi !== dpi) {
+    // 构建 base 缓存（原始 PDF 渲染，无效果）
+    const baseOffscreen = new OffscreenCanvas(exportW, exportH);
+    const baseCtx = baseOffscreen.getContext('2d');
+
+    const pdfCanvas = document.createElement('canvas');
+    pdfCanvas.width = viewport.width;
+    pdfCanvas.height = viewport.height;
+    const pdfCtx = pdfCanvas.getContext('2d');
+    await page.render({ canvasContext: pdfCtx, viewport }).promise;
+
+    baseCtx.imageSmoothingEnabled = true;
+    baseCtx.imageSmoothingQuality = 'high';
+    baseCtx.drawImage(pdfCanvas, 0, 0, exportW, exportH);
+
+    state._baseCache = baseOffscreen;
+    state._cachedPageIndex = pageIndex;
+    state._cachedDpi = dpi;
+    state._invalidCache = false;
+  }
+
+  // 从缓存复制一份离屏 canvas，叠加效果
   const offscreen = new OffscreenCanvas(exportW, exportH);
   const offCtx = offscreen.getContext('2d');
+  offCtx.drawImage(state._baseCache, 0, 0);
 
-  // 先渲染 PDF 页面（低分辨率临时 canvas，然后缩放）
-  const pdfViewport = page.getViewport({ scale: 1 });
-  const pdfCanvas = document.createElement('canvas');
-  pdfCanvas.width = pdfViewport.width;
-  pdfCanvas.height = pdfViewport.height;
-  const pdfCtx = pdfCanvas.getContext('2d');
-  await page.render({ canvasContext: pdfCtx, viewport: pdfViewport }).promise;
-
-  // 缩放到目标 DPI
-  offCtx.imageSmoothingEnabled = true;
-  offCtx.imageSmoothingQuality = 'high';
-  offCtx.drawImage(pdfCanvas, 0, 0, exportW, exportH);
-
-  // 2. 应用图像效果
+  // 应用效果
   applyImageEffects(offCtx, exportW, exportH);
-
-  // 3. 应用倾斜变换
-  const effectiveAngle = getEffectiveSkew(pageIndex);
-  // 不需要画到主 canvas 再做变换，直接在最后绘制时变换
-
-  // 4. 应用水印
   applyWatermark(offCtx, exportW, exportH);
-
-  // 5. 应用签名/印章
   applyOverlays(offCtx, exportW, exportH);
 
-  // 6. 绘制到主 canvas
+  // 绘制到主 canvas（用 rAF 避免闪烁）
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(offscreen, 0, 0);
 
-  // 如果当前页有倾斜，应用 CSS transform 来预览
+  // 倾斜预览
+  const effectiveAngle = getEffectiveSkew(pageIndex);
   if (Math.abs(effectiveAngle) > 0.01) {
     const rad = effectiveAngle * Math.PI / 180;
     canvas.style.transform = `rotate(${effectiveAngle}deg)`;
@@ -352,6 +368,11 @@ async function renderCurrentPage() {
 
   const t1 = performance.now();
   renderTime.textContent = `渲染: ${(t1 - t0).toFixed(0)}ms | ${exportW}×${exportH}`;
+}
+
+/** 标记缓存失效，下次渲染会重建 */
+function invalidateCache() {
+  state._invalidCache = true;
 }
 
 // ===== 示例页面渲染 =====
@@ -678,17 +699,36 @@ function addOverlay(file, type) {
       });
 
       renderOverlayList();
-      renderCurrentPage();
+      scheduleRender();
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
+function updateOverlay(id, field, value) {
+  const ov = state.overlays.find(o => o.id === id);
+  if (!ov) return;
+
+  if (field === 'width') {
+    const newW = Math.max(10, parseInt(value) || ov.width);
+    const ratio = ov.naturalH / ov.naturalW;
+    ov.width = newW;
+    ov.height = Math.round(newW * ratio);
+  } else if (field === 'x') {
+    ov.x = parseInt(value) || 0;
+  } else if (field === 'y') {
+    ov.y = parseInt(value) || 0;
+  }
+
+  renderOverlayList();
+  scheduleRender();
+}
+
 function removeOverlay(id) {
   state.overlays = state.overlays.filter(o => o.id !== id);
   renderOverlayList();
-  renderCurrentPage();
+  scheduleRender();
 }
 
 function renderOverlayList() {
@@ -698,15 +738,28 @@ function renderOverlayList() {
   }
   overlayList.innerHTML = state.overlays.map(o => `
     <div class="overlay-item">
-      <span>${o.type === '签名' ? '🖊' : '🔴'}</span>
-      <span class="overlay-name">${truncate(o.name, 16)}</span>
-      <span style="font-size:0.7em;color:#666;">(${o.width}×${o.height})</span>
-      <span class="overlay-del" data-id="${o.id}">✕</span>
+      <div style="display:flex;align-items:center;gap:6px;width:100%">
+        <span>${o.type === '签名' ? '🖊' : '🔴'}</span>
+        <span class="overlay-name">${truncate(o.name, 12)}</span>
+        <span class="overlay-del" data-id="${o.id}">✕</span>
+      </div>
+      <div class="overlay-params">
+        <label>X <input type="number" value="${o.x}" data-id="${o.id}" data-field="x" min="0" step="1"></label>
+        <label>Y <input type="number" value="${o.y}" data-id="${o.id}" data-field="y" min="0" step="1"></label>
+        <label>宽 <input type="number" value="${o.width}" data-id="${o.id}" data-field="width" min="10" step="1"></label>
+        <label style="color:#555">${o.height}px</label>
+      </div>
     </div>
   `).join('');
 
   overlayList.querySelectorAll('.overlay-del').forEach(el => {
     el.addEventListener('click', () => removeOverlay(parseInt(el.dataset.id)));
+  });
+
+  overlayList.querySelectorAll('.overlay-params input').forEach(el => {
+    const id = parseInt(el.dataset.id);
+    const field = el.dataset.field;
+    el.addEventListener('input', () => updateOverlay(id, field, el.value));
   });
 }
 
@@ -720,7 +773,20 @@ function applyOverlays(offscreenCtx, w, h) {
 
 // ===== 控制事件 =====
 
-// 所有滑块和输入变化都触发重新渲染
+/** 使用 rAF 合并多次重绘请求，避免闪烁 */
+function scheduleRender() {
+  state._needsRender = true;
+  if (state._rafId) return;
+  state._rafId = requestAnimationFrame(async () => {
+    state._rafId = null;
+    if (state._needsRender) {
+      state._needsRender = false;
+      await renderCurrentPage();
+    }
+  });
+}
+
+// 所有滑块和输入变化都触发重新渲染（通过 rAF 批量合并）
 const renderTriggers = [
   wmText, wmSize, wmColor, wmOpacity, wmAngle,
   skewAngle, skewRandom,
@@ -729,15 +795,11 @@ const renderTriggers = [
 ];
 
 for (const el of renderTriggers) {
-  const eventType = el.type === 'range' || el.type === 'select-one' ? 'input' : 'input';
-  el.addEventListener(eventType, () => {
-    renderCurrentPage();
-  });
-  // text input 用 change 事件
+  // 滑块/下拉框：input 事件用 rAF 合并
+  el.addEventListener('input', scheduleRender);
+  // 文本/颜色输入：change 事件（失焦/回车时触发）
   if (el.type === 'text' || el.type === 'color') {
-    el.addEventListener('change', () => {
-      renderCurrentPage();
-    });
+    el.addEventListener('change', scheduleRender);
   }
 }
 
