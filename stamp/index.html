@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>印章生成器 — VibeForge</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔴</text></svg>">
+<base href="/stamp/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ===== 左侧边栏 ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">🔴</div>
+      <h1 class="title">印章生成器</h1>
+      <p class="subtitle">多形状 · 自定义文字</p>
+      <a href="../" class="back-link">← 返回 VibeForge</a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">形状</div>
+      <div class="shape-tabs" id="shapeTabs">
+        <button class="shape-tab active" data-shape="circle">● 圆形</button>
+        <button class="shape-tab" data-shape="ellipse">⬮ 椭圆</button>
+        <button class="shape-tab" data-shape="rect">▬ 矩形</button>
+        <button class="shape-tab" data-shape="roundrect">▣ 圆角矩形</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">印章大小</div>
+      <div class="size-control">
+        <input type="range" id="sizeSlider" min="120" max="400" value="240" step="10">
+        <span class="size-value" id="sizeValue">240px</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">描边粗细</div>
+      <div class="size-control">
+        <input type="range" id="borderWidth" min="1" max="8" value="3" step="0.5">
+        <span class="size-value" id="borderWidthValue">3px</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">颜色</div>
+      <div class="color-control">
+        <input type="color" id="primaryColor" value="#cc0000">
+        <label for="primaryColor">主色</label>
+        <input type="color" id="secondaryColor" value="#ffcccc">
+        <label for="secondaryColor">辅色</label>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">上方弧形文字</div>
+      <input type="text" class="text-input" id="topText" placeholder="例如：XX 科技有限公司" value="">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">中间主文字</div>
+      <input type="text" class="text-input" id="mainText" placeholder="例如：财务专用章" value="财务专用章">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">第二行文字</div>
+      <input type="text" class="text-input" id="secondLine" placeholder="例如：合同专用章" value="">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">底部编号</div>
+      <input type="text" class="text-input" id="bottomText" placeholder="例如：NO.2024001" value="">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">布局微调</div>
+      <div class="size-control">
+        <label class="ctrl-label">星偏移</label>
+        <input type="range" id="starOffset" min="-30" max="30" value="0" step="1">
+        <span class="size-value" id="starOffsetValue">0</span>
+      </div>
+      <div class="size-control">
+        <label class="ctrl-label">文字Y</label>
+        <input type="range" id="mainYOffset" min="-20" max="20" value="0" step="1">
+        <span class="size-value" id="mainYOffsetValue">0</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">文字大小</div>
+      <div class="size-control">
+        <input type="range" id="fontSize" min="12" max="60" value="32" step="1">
+        <span class="size-value" id="fontSizeValue">32px</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">文字排版</div>
+      <div class="size-control">
+        <label class="ctrl-label">字间距</label>
+        <input type="range" id="charSpacing" min="-2" max="10" value="0" step="0.5">
+        <span class="size-value" id="charSpacingValue">0</span>
+      </div>
+      <div class="size-control">
+        <label class="ctrl-label">星大小</label>
+        <input type="range" id="starSize" min="3" max="15" value="6" step="0.5">
+        <span class="size-value" id="starSizeValue">6</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">边框与防伪</div>
+      <div class="size-control">
+        <label class="ctrl-label">样式</label>
+        <div class="custom-select" id="borderStyleSelect">
+          <button class="select-trigger" id="borderStyleTrigger">
+            <span id="borderStyleText">粗外细内</span>
+            <span class="select-arrow">▾</span>
+          </button>
+          <div class="select-dropdown" id="borderStyleDropdown">
+            <button class="select-option active" data-value="thick-thin">粗外细内</button>
+            <button class="select-option" data-value="single">单线</button>
+            <button class="select-option" data-value="double">双线等粗</button>
+          </div>
+        </div>
+      </div>
+      <div class="size-control">
+        <label class="ctrl-label">缺口数</label>
+        <input type="range" id="notchCount" min="0" max="4" value="0" step="1">
+        <span class="size-value" id="notchCountValue">0</span>
+      </div>
+      <div class="notch-angles" id="notchAnglesContainer"></div>
+      <div class="size-control">
+        <label class="ctrl-label">旋转</label>
+        <input type="range" id="rotation" min="-30" max="30" value="0" step="1">
+        <span class="size-value" id="rotationValue">0°</span>
+      </div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn btn-primary" id="downloadBtn">📥 下载 PNG</button>
+    </div>
+  </aside>
+
+  <!-- ===== 右侧主区域 ===== -->
+  <main class="main-area">
+    <div class="canvas-container">
+      <canvas id="stampCanvas"></canvas>
+    </div>
+    <div class="tip">
+      <span>💡 提示：下载的图片为透明背景 PNG，可直接用于文档或设计稿</span>
+    </div>
+  </main>
+
+</div>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>
